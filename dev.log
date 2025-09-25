@@ -1,0 +1,29 @@
+
+> ptsystem-app@0.1.0 dev
+> next dev --turbopack
+
+ ⚠ Port 3000 is in use by process 63890, using available port 3003 instead.
+   ▲ Next.js 15.5.2 (Turbopack)
+   - Local:        http://localhost:3003
+   - Network:      http://192.168.1.191:3003
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Compiled middleware in 159ms
+ ✓ Ready in 1063ms
+ ○ Compiling /dashboard/bookings ...
+ ✓ Compiled /dashboard/bookings in 2.4s
+[next-auth][warn][DEBUG_ENABLED] 
+https://next-auth.js.org/warnings#debug_enabled
+ GET /dashboard/bookings 200 in 3223ms
+ ○ Compiling /api/departments ...
+ ✓ Compiled /api/departments in 545ms
+[next-auth][warn][DEBUG_ENABLED] 
+https://next-auth.js.org/warnings#debug_enabled
+ GET /api/auth/session 200 in 1416ms
+ GET /api/departments 200 in 1632ms
+ GET /api/bookings 200 in 2101ms
+ GET /dashboard/bookings 200 in 136ms
+ GET /api/auth/session 200 in 268ms
+ GET /api/departments 200 in 341ms
+ GET /api/bookings 200 in 831ms
