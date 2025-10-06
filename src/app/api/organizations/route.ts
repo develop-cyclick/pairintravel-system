@@ -24,8 +24,7 @@ export async function GET(request: NextRequest) {
           select: {
             users: true,
             customers: true,
-            bookings: true,
-            departments: true
+            bookings: true
           }
         }
       }
