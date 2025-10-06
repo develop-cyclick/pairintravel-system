@@ -46,11 +46,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create new destination (Admin only)
+// POST - Create new destination (Admin and Agent)
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role !== "ADMIN") {
+    if (!session || (session.user.role !== "ADMIN" && session.user.role !== "AGENT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 

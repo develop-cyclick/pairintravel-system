@@ -62,8 +62,8 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized: Admin access required" }, { status: 401 })
+    if (!session || (session.user.role !== "ADMIN" && session.user.role !== "AGENT")) {
+      return NextResponse.json({ error: "Unauthorized: Admin or Agent access required" }, { status: 401 })
     }
 
     // Verify department exists
@@ -116,8 +116,8 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized: Admin access required" }, { status: 401 })
+    if (!session || (session.user.role !== "ADMIN" && session.user.role !== "AGENT")) {
+      return NextResponse.json({ error: "Unauthorized: Admin or Agent access required" }, { status: 401 })
     }
 
     // Check if department has bookings

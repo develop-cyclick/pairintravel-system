@@ -42,7 +42,7 @@ export async function GET(
   }
 }
 
-// PUT - Update airline (Admin only)
+// PUT - Update airline (Admin and Agent)
 export async function PUT(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
@@ -50,7 +50,7 @@ export async function PUT(
   try {
     const params = await props.params
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role !== "ADMIN") {
+    if (!session || (session.user.role !== "ADMIN" && session.user.role !== "AGENT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -96,7 +96,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete airline (Admin only)
+// DELETE - Delete airline (Admin and Agent)
 export async function DELETE(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
@@ -104,7 +104,7 @@ export async function DELETE(
   try {
     const params = await props.params
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role !== "ADMIN") {
+    if (!session || (session.user.role !== "ADMIN" && session.user.role !== "AGENT")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
