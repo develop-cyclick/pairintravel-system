@@ -1,69 +1,80 @@
-import React from 'react'
-import { Document, Page, Head, Footer } from '@htmldocs/react'
-import { format } from 'date-fns'
+import React from "react";
+import { Document, Page, Head, Footer } from "@htmldocs/react";
+import { format } from "date-fns";
 
 interface InvoiceProps {
-  type: 'group' | 'individual'
-  invoiceNumber: string
-  poNumber: string
-  totalAmount: number
-  tax: number
-  amount: number
-  qrCode?: string
-  createdAt: Date
+  type: "group" | "individual";
+  invoiceNumber: string;
+  poNumber: string;
+  totalAmount: number;
+  tax: number;
+  amount: number;
+  airportTax?: number;
+  baggageCharge?: number;
+  mealCharge?: number;
+  seatSelectionCharge?: number;
+  qrCode?: string;
+  createdAt: Date;
   department?: {
-    nameEn: string
-    nameTh?: string
-    code: string
-    phone?: string
-    email?: string
-    address?: string
-    taxId?: string
-  }
+    nameEn: string;
+    nameTh?: string;
+    code: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    taxId?: string;
+  };
   customer?: {
-    firstName: string
-    lastName: string
-    email: string
-    phone?: string
-    address?: string
-  }
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    address?: string;
+  };
   mainCustomer?: {
-    firstName: string
-    lastName: string
-  }
+    firstName: string;
+    lastName: string;
+  };
   passenger?: {
-    title?: string
-    firstName: string
-    lastName: string
-    email: string
-    phone?: string
-    passportNo?: string
-    nationalId?: string
-  }
+    title?: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    passportNo?: string;
+    nationalId?: string;
+  };
   bookings?: Array<{
-    bookingRef: string
-    totalAmount: number
-    passengers?: any[]
-  }>
+    bookingRef: string;
+    returnBookingRef?: string;
+    returnFlightNumber?: string;
+    returnAirline?: string;
+    totalAmount: number;
+    passengers?: any[];
+    baggageCharge?: number;
+    mealCharge?: number;
+    seatSelectionCharge?: number;
+    airportTax?: number;
+  }>;
   tourBookings?: Array<{
     tourPackage?: {
-      name: string
-    }
-    totalAmount: number
-    passengers?: any[]
-    departureDate?: string
-    returnDate?: string
-    pickupLocation?: string
-    pickupTime?: string
-    tourProgramDetails?: string
-  }>
-  passengers?: any[]
+      name: string;
+    };
+    totalAmount: number;
+    passengers?: any[];
+    departureDate?: string;
+    returnDate?: string;
+    pickupLocation?: string;
+    pickupTime?: string;
+    tourProgramDetails?: string;
+  }>;
+  passengers?: any[];
 }
 
 export default function StandardInvoice(props: InvoiceProps) {
   const formatCurrency = (amount: number) => {
-    return `฿${amount.toLocaleString('en-US')}`
-  }
+    return `฿${amount.toLocaleString("en-US")}`;
+  };
 
   return (
     <Document>
@@ -225,10 +236,10 @@ export default function StandardInvoice(props: InvoiceProps) {
           }
 
           .qr-code {
-            width: 150px;
-            height: 150px;
+            width: 50px;
+            height: 50px;
             margin: 0 auto;
-            padding: 10px;
+            padding: 5px;
             background: white;
             border: 1px solid #ddd;
             border-radius: 4px;
@@ -283,8 +294,8 @@ export default function StandardInvoice(props: InvoiceProps) {
           {/* Header */}
           <div className="header">
             <h1 className="title">INVOICE</h1>
-            <div className="badge">
-              {props.type === 'group' ? 'GROUP INVOICE' : 'INDIVIDUAL INVOICE'}
+            <div className="badge ">
+              {props.type === "group" ? "GROUP INVOICE" : "INDIVIDUAL INVOICE"}
             </div>
           </div>
 
@@ -300,7 +311,7 @@ export default function StandardInvoice(props: InvoiceProps) {
             </div>
             <div className="info-row">
               <span className="info-label">Date:</span>
-              <span>{format(new Date(props.createdAt), 'dd MMM yyyy')}</span>
+              <span>{format(new Date(props.createdAt), "dd MMM yyyy")}</span>
             </div>
           </div>
 
@@ -308,32 +319,58 @@ export default function StandardInvoice(props: InvoiceProps) {
           <div className="bill-to">
             <h2 className="section-title">BILL TO:</h2>
 
-            {props.type === 'group' ? (
+            {props.type === "group" ? (
               <div className="customer-info">
                 {props.department ? (
                   <>
-                    <div style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '8px' }}>
+                    <div
+                      style={{
+                        fontSize: "16px",
+                        fontWeight: "bold",
+                        marginBottom: "8px",
+                      }}
+                    >
                       {props.department.nameEn}
                     </div>
                     {props.department.nameTh && (
-                      <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>
+                      <div
+                        style={{
+                          fontSize: "14px",
+                          color: "#666",
+                          marginBottom: "8px",
+                        }}
+                      >
                         {props.department.nameTh}
                       </div>
                     )}
                     <div>Code: {props.department.code}</div>
-                    {props.department.phone && <div>Phone: {props.department.phone}</div>}
-                    {props.department.email && <div>Email: {props.department.email}</div>}
+                    {props.department.phone && (
+                      <div>Phone: {props.department.phone}</div>
+                    )}
+                    {props.department.email && (
+                      <div>Email: {props.department.email}</div>
+                    )}
                     {props.department.address && (
-                      <div style={{ marginTop: '8px' }}>{props.department.address}</div>
+                      <div style={{ marginTop: "8px" }}>
+                        {props.department.address}
+                      </div>
                     )}
                   </>
                 ) : props.customer ? (
                   <>
-                    <div style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '8px' }}>
+                    <div
+                      style={{
+                        fontSize: "16px",
+                        fontWeight: "bold",
+                        marginBottom: "8px",
+                      }}
+                    >
                       {props.customer.firstName} {props.customer.lastName}
                     </div>
                     <div>Email: {props.customer.email}</div>
-                    {props.customer.phone && <div>Phone: {props.customer.phone}</div>}
+                    {props.customer.phone && (
+                      <div>Phone: {props.customer.phone}</div>
+                    )}
                   </>
                 ) : null}
               </div>
@@ -341,22 +378,44 @@ export default function StandardInvoice(props: InvoiceProps) {
               <div>
                 {props.passenger && (
                   <div className="customer-info">
-                    <div style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '8px' }}>
-                      {props.passenger.title} {props.passenger.firstName} {props.passenger.lastName}
+                    <div
+                      style={{
+                        fontSize: "16px",
+                        fontWeight: "bold",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      {props.passenger.title} {props.passenger.firstName}{" "}
+                      {props.passenger.lastName}
                     </div>
                     <div>Email: {props.passenger.email}</div>
-                    {props.passenger.phone && <div>Phone: {props.passenger.phone}</div>}
-                    {props.passenger.passportNo && <div>Passport: {props.passenger.passportNo}</div>}
-                    {props.passenger.nationalId && <div>National ID: {props.passenger.nationalId}</div>}
+                    {props.passenger.phone && (
+                      <div>Phone: {props.passenger.phone}</div>
+                    )}
+                    {props.passenger.passportNo && (
+                      <div>Passport: {props.passenger.passportNo}</div>
+                    )}
+                    {props.passenger.nationalId && (
+                      <div>National ID: {props.passenger.nationalId}</div>
+                    )}
                   </div>
                 )}
 
                 {(props.department || props.mainCustomer) && (
-                  <div style={{ marginTop: '15px', fontSize: '13px', color: '#666' }}>
+                  <div
+                    style={{
+                      marginTop: "15px",
+                      fontSize: "13px",
+                      color: "#666",
+                    }}
+                  >
                     {props.department ? (
                       <div>Organization: {props.department.nameEn}</div>
                     ) : props.mainCustomer ? (
-                      <div>Main Contact: {props.mainCustomer.firstName} {props.mainCustomer.lastName}</div>
+                      <div>
+                        Main Contact: {props.mainCustomer.firstName}{" "}
+                        {props.mainCustomer.lastName}
+                      </div>
                     ) : null}
                   </div>
                 )}
@@ -368,17 +427,22 @@ export default function StandardInvoice(props: InvoiceProps) {
           <table className="table">
             <thead>
               <tr>
-                <th style={{ width: '60%' }}>Description</th>
-                <th className="text-right" style={{ width: '40%' }}>Amount</th>
+                <th style={{ width: "60%" }}>Description</th>
+                <th className="text-right" style={{ width: "40%" }}>
+                  Amount
+                </th>
               </tr>
             </thead>
             <tbody>
-              {props.type === 'group' ? (
+              {props.type === "group" ? (
                 <>
                   {props.bookings && props.bookings.length > 0 && (
                     <>
                       <tr>
-                        <td colSpan={2} style={{ fontWeight: 'bold', background: '#f9f9f9' }}>
+                        <td
+                          colSpan={2}
+                          style={{ fontWeight: "bold", background: "#f9f9f9" }}
+                        >
                           Flight Bookings:
                         </td>
                       </tr>
@@ -386,10 +450,29 @@ export default function StandardInvoice(props: InvoiceProps) {
                         <tr key={index}>
                           <td>
                             <div className="booking-item">
-                              <span className="booking-ref">Booking Ref: {booking.bookingRef}</span>
+                              <span className="booking-ref">
+                                Outbound PNR: {booking.bookingRef}
+                              </span>
+                              {booking.returnBookingRef && (
+                                <span className="booking-ref" style={{ marginLeft: "10px" }}>
+                                  Return PNR: {booking.returnBookingRef}
+                                </span>
+                              )}
                               <span className="passenger-count">
                                 Passengers: {booking.passengers?.length || 0}
                               </span>
+                              {((booking.baggageCharge && booking.baggageCharge > 0) ||
+                                (booking.mealCharge && booking.mealCharge > 0) ||
+                                (booking.seatSelectionCharge && booking.seatSelectionCharge > 0) ||
+                                (booking.airportTax && booking.airportTax > 0)) && (
+                                <div style={{ marginTop: "5px", fontSize: "12px", color: "#666" }}>
+                                  Additional Charges:
+                                  {booking.baggageCharge > 0 && ` Baggage: ${formatCurrency(booking.baggageCharge)}`}
+                                  {booking.mealCharge > 0 && ` Meal: ${formatCurrency(booking.mealCharge)}`}
+                                  {booking.seatSelectionCharge > 0 && ` Seat: ${formatCurrency(booking.seatSelectionCharge)}`}
+                                  {booking.airportTax > 0 && ` Airport Tax: ${formatCurrency(booking.airportTax)}`}
+                                </div>
+                              )}
                             </div>
                           </td>
                           <td className="text-right">
@@ -403,7 +486,14 @@ export default function StandardInvoice(props: InvoiceProps) {
                   {props.tourBookings && props.tourBookings.length > 0 && (
                     <>
                       <tr>
-                        <td colSpan={2} style={{ fontWeight: 'bold', background: '#f9f9f9', paddingTop: '15px' }}>
+                        <td
+                          colSpan={2}
+                          style={{
+                            fontWeight: "bold",
+                            background: "#f9f9f9",
+                            paddingTop: "15px",
+                          }}
+                        >
                           Tour Package Bookings:
                         </td>
                       </tr>
@@ -412,23 +502,41 @@ export default function StandardInvoice(props: InvoiceProps) {
                           <td>
                             <div className="tour-details">
                               <div className="tour-name">
-                                {booking.tourPackage?.name || 'Tour Package'}
+                                {booking.tourPackage?.name || "Tour Package"}
                               </div>
                               <div className="tour-info">
-                                <div>Passengers: {booking.passengers?.length || 0}</div>
-                                {booking.departureDate && booking.returnDate && (
-                                  <div>
-                                    Dates: {format(new Date(booking.departureDate), 'dd MMM yyyy')} - {' '}
-                                    {format(new Date(booking.returnDate), 'dd MMM yyyy')}
-                                  </div>
-                                )}
-                                {booking.pickupLocation && booking.pickupTime && (
-                                  <div>Pickup: {booking.pickupLocation} at {booking.pickupTime}</div>
-                                )}
+                                <div>
+                                  Passengers: {booking.passengers?.length || 0}
+                                </div>
+                                {booking.departureDate &&
+                                  booking.returnDate && (
+                                    <div>
+                                      Dates:{" "}
+                                      {format(
+                                        new Date(booking.departureDate),
+                                        "dd MMM yyyy"
+                                      )}{" "}
+                                      -{" "}
+                                      {format(
+                                        new Date(booking.returnDate),
+                                        "dd MMM yyyy"
+                                      )}
+                                    </div>
+                                  )}
+                                {booking.pickupLocation &&
+                                  booking.pickupTime && (
+                                    <div>
+                                      Pickup: {booking.pickupLocation} at{" "}
+                                      {booking.pickupTime}
+                                    </div>
+                                  )}
                               </div>
                             </div>
                           </td>
-                          <td className="text-right" style={{ verticalAlign: 'middle' }}>
+                          <td
+                            className="text-right"
+                            style={{ verticalAlign: "middle" }}
+                          >
                             {formatCurrency(booking.totalAmount || 0)}
                           </td>
                         </tr>
@@ -438,8 +546,10 @@ export default function StandardInvoice(props: InvoiceProps) {
 
                   {props.passengers && (
                     <tr>
-                      <td style={{ paddingTop: '15px' }}>
-                        <strong>Total Passengers: {props.passengers.length}</strong>
+                      <td style={{ paddingTop: "15px" }}>
+                        <strong>
+                          Total Passengers: {props.passengers.length}
+                        </strong>
                       </td>
                       <td></td>
                     </tr>
@@ -448,7 +558,8 @@ export default function StandardInvoice(props: InvoiceProps) {
               ) : (
                 <tr>
                   <td>
-                    Travel Service for {props.passenger?.firstName} {props.passenger?.lastName}
+                    Travel Service for {props.passenger?.firstName}{" "}
+                    {props.passenger?.lastName}
                   </td>
                   <td className="text-right">{formatCurrency(props.amount)}</td>
                 </tr>
@@ -466,6 +577,12 @@ export default function StandardInvoice(props: InvoiceProps) {
               <span>VAT (7%):</span>
               <span>{formatCurrency(props.tax)}</span>
             </div>
+            {props.airportTax && props.airportTax > 0 && (
+              <div className="summary-row">
+                <span>ค่าภาษีสนามบิน (Airport Tax):</span>
+                <span>{formatCurrency(props.airportTax)}</span>
+              </div>
+            )}
             <div className="summary-row total">
               <span>Total Amount:</span>
               <span>{formatCurrency(props.totalAmount)}</span>
@@ -488,11 +605,11 @@ export default function StandardInvoice(props: InvoiceProps) {
               This is a computer-generated invoice. No signature required.
             </div>
             <div className="footer-text">
-              Generated on {format(new Date(), 'dd MMM yyyy HH:mm')}
+              Generated on {format(new Date(), "dd MMM yyyy HH:mm")}
             </div>
           </div>
         </div>
       </Page>
     </Document>
-  )
+  );
 }

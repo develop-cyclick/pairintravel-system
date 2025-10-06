@@ -14,7 +14,8 @@ import {
   Building2,
   ChevronRight,
   CreditCard,
-  CheckCircle
+  CheckCircle,
+  Building
 } from "lucide-react"
 import {
   Sidebar,
@@ -87,10 +88,22 @@ const navItems: NavItem[] = [
     roles: ["ADMIN"]
   },
   {
+    title: "Users",
+    href: "/dashboard/users",
+    icon: <Users className="h-4 w-4" />,
+    roles: ["ADMIN"]
+  },
+  {
     title: "Settings",
     href: "/dashboard/settings",
     icon: <Settings className="h-4 w-4" />,
     roles: ["ADMIN", "AGENT"]
+  },
+  {
+    title: "Organizations",
+    href: "/dashboard/organizations",
+    icon: <Building className="h-4 w-4" />,
+    roles: ["ADMIN"]
   }
 ]
 

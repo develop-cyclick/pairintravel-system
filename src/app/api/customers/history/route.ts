@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { getSessionOrganizationId } from "@/lib/organization"
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +11,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const organizationId = await getSessionOrganizationId()
+
     const searchParams = request.nextUrl.searchParams
     const search = searchParams.get("search") || ""
     const type = searchParams.get("type") || "all" // all, department, customer
@@ -17,10 +20,11 @@ export async function GET(request: NextRequest) {
 
     const results: any[] = []
 
-    // Search departments
+    // Search departments (filtered by organization)
     if (type === "all" || type === "department") {
       const departments = await prisma.department.findMany({
         where: {
+          organizationId,
           isActive: true,
           OR: search ? [
             { code: { contains: search, mode: "insensitive" } },
@@ -69,10 +73,11 @@ export async function GET(request: NextRequest) {
       })))
     }
 
-    // Search customers
+    // Search customers (filtered by organization)
     if (type === "all" || type === "customer") {
       const customers = await prisma.customer.findMany({
         where: search ? {
+          organizationId,
           OR: [
             { firstName: { contains: search, mode: "insensitive" } },
             { lastName: { contains: search, mode: "insensitive" } },
@@ -81,7 +86,7 @@ export async function GET(request: NextRequest) {
             { nationalId: { contains: search } },
             { passportNo: { contains: search } }
           ]
-        } : undefined,
+        } : { organizationId },
         select: {
           id: true,
           title: true,
@@ -119,8 +124,9 @@ export async function GET(request: NextRequest) {
     results.sort((a, b) => b.usageCount - a.usageCount)
     const finalResults = results.slice(0, limit)
 
-    // Get recent POs for context
+    // Get recent POs for context (filtered by organization)
     const recentPOs = await prisma.purchaseOrder.findMany({
+      where: { organizationId },
       select: {
         id: true,
         poNumber: true,

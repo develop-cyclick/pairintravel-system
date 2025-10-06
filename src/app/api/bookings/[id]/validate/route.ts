@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { getSessionOrganizationId, verifyOrganizationAccess } from '@/lib/organization'
 
 export async function PATCH(
   request: NextRequest,
@@ -16,11 +17,22 @@ export async function PATCH(
       )
     }
 
+    const organizationId = await getSessionOrganizationId()
+
     const body = await request.json()
     const { airlinePNR, ticketNumber, isValidated } = body
 
-    const booking = await prisma.booking.findUnique({
-      where: { id: params.id }
+    const booking = await prisma.booking.findFirst({
+      where: {
+        id: params.id,
+        organizationId
+      },
+      select: {
+        id: true,
+        organizationId: true,
+        airlinePNR: true,
+        ticketNumber: true
+      }
     })
 
     if (!booking) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { getSessionOrganizationId, verifyOrganizationAccess } from "@/lib/organization"
 
 export async function POST(
   request: NextRequest,
@@ -13,8 +14,13 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: params.id },
+    const organizationId = await getSessionOrganizationId()
+
+    const invoice = await prisma.invoice.findFirst({
+      where: {
+        id: params.id,
+        organizationId
+      },
       include: {
         purchaseOrder: true
       }

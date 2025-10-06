@@ -5,32 +5,50 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Plane, 
-  Users, 
-  DollarSign, 
+import {
+  Plane,
+  Users,
+  DollarSign,
   Calendar,
   TrendingUp,
   Activity,
   CreditCard,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Building2
 } from "lucide-react"
 import { RevenueChart } from "@/components/dashboard/revenue-chart"
 import { BookingsChart } from "@/components/dashboard/bookings-chart"
 import { RecentBookings } from "@/components/dashboard/recent-bookings"
+import { getSessionOrganizationId, getOrganizationStats } from "@/lib/organization"
 
 async function getDashboardStats() {
-  // This would fetch from database in production
-  return {
-    totalRevenue: 15231890,
-    revenueChange: 20.5,
-    totalBookings: 2350,
-    bookingsChange: 18.0,
-    activeFlights: 24,
-    flightsChange: -5.2,
-    totalCustomers: 890,
-    customersChange: 12.3
+  try {
+    const organizationId = await getSessionOrganizationId()
+    const orgStats = await getOrganizationStats(organizationId)
+
+    return {
+      totalRevenue: orgStats.totalRevenue || 0,
+      revenueChange: 20.5, // Calculate from historical data
+      totalBookings: orgStats.totalBookings || 0,
+      bookingsChange: 18.0, // Calculate from historical data
+      activeFlights: 24, // This is shared across organizations
+      flightsChange: -5.2,
+      totalCustomers: orgStats.totalCustomers || 0,
+      customersChange: 12.3 // Calculate from historical data
+    }
+  } catch (error) {
+    console.error("Error fetching dashboard stats:", error)
+    return {
+      totalRevenue: 0,
+      revenueChange: 0,
+      totalBookings: 0,
+      bookingsChange: 0,
+      activeFlights: 0,
+      flightsChange: 0,
+      totalCustomers: 0,
+      customersChange: 0
+    }
   }
 }
 
@@ -41,7 +59,15 @@ export default async function DashboardPage() {
   return (
     <div className="flex-1 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+        <div className="space-y-1">
+          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          {session?.user.organizationName && (
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5" />
+              Showing data for {session.user.organizationName}
+            </p>
+          )}
+        </div>
         <div className="flex items-center space-x-2">
           <Button>Download Report</Button>
         </div>

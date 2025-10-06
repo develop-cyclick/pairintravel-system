@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { getSessionOrganizationId, verifyOrganizationAccess } from "@/lib/organization"
 
 export async function GET(
   request: NextRequest,
@@ -13,8 +14,13 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const booking = await prisma.booking.findUnique({
-      where: { id: params.id },
+    const organizationId = await getSessionOrganizationId()
+
+    const booking = await prisma.booking.findFirst({
+      where: {
+        id: params.id,
+        organizationId
+      },
       include: {
         flight: true,
         user: true,
@@ -49,6 +55,18 @@ export async function PUT(
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // Verify the booking belongs to user's organization
+    const existing = await prisma.booking.findUnique({
+      where: { id: params.id },
+      select: { organizationId: true }
+    })
+
+    if (!existing) {
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 })
+    }
+
+    await verifyOrganizationAccess(existing.organizationId)
 
     const body = await request.json()
     const { status, type, departmentId } = body
@@ -91,22 +109,28 @@ export async function DELETE(
 
     const booking = await prisma.booking.findUnique({
       where: { id: params.id },
-      include: { flight: true, passengers: true }
+      include: { flight: true, passengers: true },
+      select: { id: true, flightId: true, organizationId: true, passengers: true }
     })
 
     if (!booking) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 })
     }
 
-    // Return seats to flight
-    await prisma.flight.update({
-      where: { id: booking.flightId },
-      data: {
-        availableSeats: {
-          increment: booking.passengers.length
+    // Verify the booking belongs to user's organization
+    await verifyOrganizationAccess(booking.organizationId)
+
+    // Return seats to flight if booking has a flight
+    if (booking.flightId) {
+      await prisma.flight.update({
+        where: { id: booking.flightId },
+        data: {
+          availableSeats: {
+            increment: booking.passengers.length
+          }
         }
-      }
-    })
+      })
+    }
 
     // Delete booking (cascades to passengers)
     await prisma.booking.delete({

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { z } from "zod"
+import { getSessionOrganizationId } from "@/lib/organization"
 
 const createCustomerSchema = z.object({
   title: z.string().transform(val => val || "Mr."),  // Default to Mr. if empty
@@ -12,6 +13,8 @@ const createCustomerSchema = z.object({
   phone: z.string().transform(val => val || ""),  // Allow empty, transform to empty string
   nationalId: z.string().transform(val => val || null),  // Allow empty, transform to null
   passportNo: z.string().transform(val => val || null),  // Allow empty, transform to null
+  governmentId: z.string().transform(val => val || null),  // Allow empty, transform to null
+  governmentIdExpiryDate: z.string().transform(val => val || null),  // Allow empty, transform to null
   dateOfBirth: z.string().min(1, "Date of birth is required"),
   nationality: z.string().transform(val => val || "Thai")  // Default to Thai if empty
 })
@@ -23,22 +26,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const organizationId = await getSessionOrganizationId()
+
     const searchParams = request.nextUrl.searchParams
     const search = searchParams.get("search")
     const page = parseInt(searchParams.get("page") || "1")
     const limit = parseInt(searchParams.get("limit") || "20")
 
-    let where: any = {}
-    
+    let where: any = { organizationId }
+
     if (search && search.length >= 2) {
       where = {
+        organizationId,
         OR: [
           { firstName: { contains: search, mode: "insensitive" } },
           { lastName: { contains: search, mode: "insensitive" } },
           { email: { contains: search, mode: "insensitive" } },
           { phone: { contains: search, mode: "insensitive" } },
           { nationalId: { contains: search, mode: "insensitive" } },
-          { passportNo: { contains: search, mode: "insensitive" } }
+          { passportNo: { contains: search, mode: "insensitive" } },
+          { governmentId: { contains: search, mode: "insensitive" } }
         ]
       }
     }
@@ -111,12 +118,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const organizationId = await getSessionOrganizationId()
+
     const body = await request.json()
     const validatedData = createCustomerSchema.parse(body)
 
-    // Check if customer already exists
+    // Check if customer already exists in this organization
     const existingCustomer = await prisma.customer.findFirst({
-      where: { email: validatedData.email }
+      where: {
+        email: validatedData.email,
+        organizationId
+      }
     })
 
     if (existingCustomer) {
@@ -125,6 +137,7 @@ export async function POST(request: NextRequest) {
 
     const customer = await prisma.customer.create({
       data: {
+        organizationId,
         title: validatedData.title,
         firstName: validatedData.firstName,
         lastName: validatedData.lastName,
@@ -133,7 +146,9 @@ export async function POST(request: NextRequest) {
         dateOfBirth: new Date(validatedData.dateOfBirth),
         nationality: validatedData.nationality,
         nationalId: validatedData.nationalId,
-        passportNo: validatedData.passportNo
+        passportNo: validatedData.passportNo,
+        governmentId: validatedData.governmentId,
+        governmentIdExpiryDate: validatedData.governmentIdExpiryDate ? new Date(validatedData.governmentIdExpiryDate) : null
       }
     })
 

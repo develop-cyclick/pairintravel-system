@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { z } from "zod"
+import { getSessionOrganizationId } from "@/lib/organization"
 
 const createCreditCardSchema = z.object({
   cardNumber: z.string().min(15).max(19),
@@ -22,11 +23,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const organizationId = await getSessionOrganizationId()
+
     const searchParams = request.nextUrl.searchParams
     const isActive = searchParams.get("active") !== "false"
     const departmentId = searchParams.get("departmentId")
 
-    const where: any = { isActive }
+    const where: any = {
+      organizationId,
+      isActive
+    }
     if (departmentId) {
       where.departmentId = departmentId
     }
@@ -68,12 +74,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    const organizationId = await getSessionOrganizationId()
+
     const body = await request.json()
     const validatedData = createCreditCardSchema.parse(body)
 
-    // Check if card number already exists
-    const existingCard = await prisma.creditCard.findUnique({
-      where: { cardNumber: validatedData.cardNumber }
+    // Check if card number already exists in this organization
+    const existingCard = await prisma.creditCard.findFirst({
+      where: {
+        cardNumber: validatedData.cardNumber,
+        organizationId
+      }
     })
 
     if (existingCard) {
@@ -82,6 +93,7 @@ export async function POST(request: NextRequest) {
 
     const creditCard = await prisma.creditCard.create({
       data: {
+        organizationId,
         ...validatedData,
         departmentId: validatedData.departmentId || null,
         availableCredit: validatedData.creditLimit, // Initially, available credit equals credit limit

@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const ministry = searchParams.get("ministry")
 
     const where: any = {}
-    
+
     if (search) {
       where.OR = [
         { code: { contains: search, mode: "insensitive" } },
@@ -39,11 +39,11 @@ export async function GET(request: NextRequest) {
         { nameTh: { contains: search, mode: "insensitive" } }
       ]
     }
-    
+
     if (isActive !== null && isActive !== "all") {
       where.isActive = isActive === "true"
     }
-    
+
     if (ministry && ministry !== "all") {
       where.ministry = ministry
     }
@@ -76,18 +76,20 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-    
-    // Allow both ADMIN and AGENT to create departments
-    if (session.user.role !== "ADMIN" && session.user.role !== "AGENT") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+
+    // Only ADMIN can create departments (shared across all organizations)
+    if (session.user.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 })
     }
 
     const body = await request.json()
     const validatedData = createDepartmentSchema.parse(body)
 
-    // Check if department code already exists
+    // Check if department code already exists (globally unique)
     const existingDepartment = await prisma.department.findUnique({
-      where: { code: validatedData.code }
+      where: {
+        code: validatedData.code
+      }
     })
 
     if (existingDepartment) {

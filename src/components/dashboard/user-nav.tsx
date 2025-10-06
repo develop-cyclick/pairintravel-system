@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { User, LogOut } from "lucide-react"
+import { User, LogOut, Building2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 interface UserNavProps {
@@ -18,6 +18,7 @@ interface UserNavProps {
     name?: string | null
     email?: string | null
     role: string
+    organizationName?: string | null
   }
 }
 
@@ -51,6 +52,17 @@ export function UserNav({ user }: UserNavProps) {
             <p className="text-xs text-muted-foreground">{user.email}</p>
           </div>
         </DropdownMenuLabel>
+        {user.organizationName && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground font-normal">
+                <Building2 className="h-3.5 w-3.5" />
+                <span>{user.organizationName}</span>
+              </div>
+            </DropdownMenuLabel>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="text-red-600 cursor-pointer"

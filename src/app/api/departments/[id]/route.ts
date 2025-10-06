@@ -29,7 +29,9 @@ export async function GET(
     }
 
     const department = await prisma.department.findUnique({
-      where: { id: params.id },
+      where: {
+        id: params.id
+      },
       include: {
         _count: {
           select: {
@@ -38,11 +40,7 @@ export async function GET(
         },
         bookings: {
           take: 10,
-          orderBy: { createdAt: "desc" },
-          include: {
-            flight: true,
-            user: true
-          }
+          orderBy: { createdAt: "desc" }
         }
       }
     })
@@ -65,13 +63,22 @@ export async function PUT(
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized: Admin access required" }, { status: 401 })
+    }
+
+    // Verify department exists
+    const existing = await prisma.department.findUnique({
+      where: { id: params.id }
+    })
+
+    if (!existing) {
+      return NextResponse.json({ error: "Department not found" }, { status: 404 })
     }
 
     const body = await request.json()
     const validatedData = updateDepartmentSchema.parse(body)
 
-    // If code is being updated, check if it's unique
+    // If code is being updated, check if it's unique (globally)
     if (validatedData.code) {
       const existingDepartment = await prisma.department.findFirst({
         where: {
@@ -110,7 +117,7 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized: Admin access required" }, { status: 401 })
     }
 
     // Check if department has bookings
@@ -119,7 +126,9 @@ export async function DELETE(
       include: {
         _count: {
           select: {
-            bookings: true
+            bookings: true,
+            creditCards: true,
+            purchaseOrders: true
           }
         }
       }
@@ -129,19 +138,23 @@ export async function DELETE(
       return NextResponse.json({ error: "Department not found" }, { status: 404 })
     }
 
-    if (department._count.bookings > 0) {
+    const hasRelatedData = department._count.bookings > 0 ||
+                          department._count.creditCards > 0 ||
+                          department._count.purchaseOrders > 0
+
+    if (hasRelatedData) {
       // Instead of deleting, deactivate the department
       await prisma.department.update({
         where: { id: params.id },
         data: { isActive: false }
       })
-      
-      return NextResponse.json({ 
-        message: "Department deactivated (has existing bookings)" 
+
+      return NextResponse.json({
+        message: "Department deactivated (has existing bookings, credit cards, or purchase orders)"
       })
     }
 
-    // Delete department if no bookings
+    // Delete department if no related data
     await prisma.department.delete({
       where: { id: params.id }
     })

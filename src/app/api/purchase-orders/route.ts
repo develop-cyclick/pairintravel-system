@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { z } from "zod"
+import { getSessionOrganizationId } from "@/lib/organization"
 
 const MAX_PASSENGERS_PER_BOOKING = 9
 
@@ -24,10 +25,16 @@ const bookingSchema = z.object({
   origin: z.string(),
   destination: z.string(),
   departureDate: z.string(),
-  arrivalDate: z.string(),
   basePrice: z.number(),
   totalCost: z.number(),
   totalServiceFee: z.number(),
+  costPerPassenger: z.number().optional(),
+  serviceFeePerPassenger: z.number().optional(),
+  // Additional charges
+  baggageCharge: z.number().default(0),
+  mealCharge: z.number().default(0),
+  seatSelectionCharge: z.number().default(0),
+  airportTax: z.number().default(0),
   passengers: z.array(passengerSchema),
 })
 
@@ -82,13 +89,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const organizationId = await getSessionOrganizationId()
+
     const searchParams = request.nextUrl.searchParams
     const page = parseInt(searchParams.get("page") || "1")
     const limit = parseInt(searchParams.get("limit") || "10")
     const status = searchParams.get("status")
     const type = searchParams.get("type")
 
-    const where: any = {}
+    const where: any = { organizationId }
     if (status) where.status = status
     if (type) where.type = type
 
@@ -147,6 +156,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const organizationId = await getSessionOrganizationId()
+
     // Verify user exists in database
     let user = await prisma.user.findUnique({
       where: { id: session.user.id }
@@ -190,20 +201,30 @@ export async function POST(request: NextRequest) {
       let totalCost = 0
       let totalServiceFee = 0
       let totalAmount = 0
+      let totalAirportTax = 0
 
       validatedData.bookings.forEach(booking => {
         totalCost += booking.totalCost
         totalServiceFee += booking.totalServiceFee
-        totalAmount += booking.basePrice * booking.passengers.length
+        totalAirportTax += (booking.airportTax || 0)
+        // Include base price + all additional charges
+        const bookingAmount = (booking.basePrice * booking.passengers.length) +
+                             (booking.baggageCharge || 0) +
+                             (booking.mealCharge || 0) +
+                             (booking.seatSelectionCharge || 0) +
+                             (booking.airportTax || 0)
+        totalAmount += bookingAmount
       })
 
-      const profit = totalAmount - totalCost - totalServiceFee
+      // New profit formula: Total Amount - Total Cost + Airport Tax
+      const profit = totalAmount - totalCost + totalAirportTax
 
       // Create PO with transaction
       const purchaseOrder = await prisma.$transaction(async (tx) => {
         // Create PO first
         const po = await tx.purchaseOrder.create({
           data: {
+            organizationId,
             poNumber,
             type: "FLIGHT",
             status: "CONFIRMED",
@@ -221,8 +242,11 @@ export async function POST(request: NextRequest) {
         if (validatedData.paymentCardId || validatedData.paymentCards) {
           // Single card payment
           if (validatedData.paymentCardId) {
-            const card = await tx.creditCard.findUnique({
-              where: { id: validatedData.paymentCardId }
+            const card = await tx.creditCard.findFirst({
+              where: {
+                id: validatedData.paymentCardId,
+                organizationId
+              }
             })
 
             if (!card || !card.isActive) {
@@ -258,8 +282,11 @@ export async function POST(request: NextRequest) {
           // Multiple cards payment
           else if (validatedData.paymentCards) {
             for (const payment of validatedData.paymentCards) {
-              const card = await tx.creditCard.findUnique({
-                where: { id: payment.cardId }
+              const card = await tx.creditCard.findFirst({
+                where: {
+                  id: payment.cardId,
+                  organizationId
+                }
               })
 
               if (!card || !card.isActive) {
@@ -315,7 +342,10 @@ export async function POST(request: NextRequest) {
             for (const passenger of group) {
               if (!customerMap.has(passenger.email)) {
                 const existingCustomer = await tx.customer.findFirst({
-                  where: { email: passenger.email }
+                  where: {
+                    email: passenger.email,
+                    organizationId
+                  }
                 })
 
                 if (existingCustomer) {
@@ -336,6 +366,7 @@ export async function POST(request: NextRequest) {
                 } else {
                   const newCustomer = await tx.customer.create({
                     data: {
+                      organizationId,
                       title: passenger.title,
                       firstName: passenger.firstName,
                       lastName: passenger.lastName,
@@ -354,9 +385,22 @@ export async function POST(request: NextRequest) {
             
             const uniqueCustomers = Array.from(customerMap.values())
 
+            // Calculate proportional additional charges for this group
+            const groupBaggageCharge = (bookingData.baggageCharge || 0) * groupRatio
+            const groupMealCharge = (bookingData.mealCharge || 0) * groupRatio
+            const groupSeatCharge = (bookingData.seatSelectionCharge || 0) * groupRatio
+            const groupAirportTax = (bookingData.airportTax || 0) * groupRatio
+
+            // Calculate return flight proportional charges (if round trip)
+            const groupReturnBaggageCharge = (bookingData.returnBaggageCharge || 0) * groupRatio
+            const groupReturnMealCharge = (bookingData.returnMealCharge || 0) * groupRatio
+            const groupReturnSeatCharge = (bookingData.returnSeatSelectionCharge || 0) * groupRatio
+            const groupReturnAirportTax = (bookingData.returnAirportTax || 0) * groupRatio
+
             // Create booking for this group
             await tx.booking.create({
               data: {
+                organizationId,
                 bookingRef,
                 purchaseOrderId: po.id,
                 type: group.length > 1 ? "GROUP" : "INDIVIDUAL",
@@ -366,11 +410,27 @@ export async function POST(request: NextRequest) {
                 origin: bookingData.origin,
                 destination: bookingData.destination,
                 departureDate: new Date(bookingData.departureDate),
-                arrivalDate: new Date(bookingData.arrivalDate),
                 basePrice: bookingData.basePrice,
                 totalCost: groupCost,
                 totalServiceFee: groupServiceFee,
-                totalAmount: bookingData.basePrice * group.length,
+                // Additional charges
+                baggageCharge: groupBaggageCharge,
+                mealCharge: groupMealCharge,
+                seatSelectionCharge: groupSeatCharge,
+                airportTax: groupAirportTax,
+                // Return flight fields (for round trip bookings)
+                returnBookingRef: bookingData.returnBookingRef || null,
+                returnFlightNumber: bookingData.returnFlightNumber || null,
+                returnAirline: bookingData.returnAirline || null,
+                returnOrigin: bookingData.returnOrigin || null,
+                returnDestination: bookingData.returnDestination || null,
+                returnDepartureDate: bookingData.returnDepartureDate ? new Date(bookingData.returnDepartureDate) : null,
+                returnAirportTax: groupReturnAirportTax,
+                returnBaggageCharge: groupReturnBaggageCharge,
+                returnMealCharge: groupReturnMealCharge,
+                returnSeatSelectionCharge: groupReturnSeatCharge,
+                // Recalculated totalAmount including all charges
+                totalAmount: (bookingData.basePrice * group.length) + groupBaggageCharge + groupMealCharge + groupSeatCharge + groupAirportTax,
                 userId: user.id,
                 departmentId: validatedData.departmentId,
                 passengers: {
@@ -453,6 +513,7 @@ export async function POST(request: NextRequest) {
         // Create PO
         const po = await tx.purchaseOrder.create({
           data: {
+            organizationId,
             poNumber,
             type: "TOUR",
             status: "CONFIRMED",
@@ -475,7 +536,10 @@ export async function POST(request: NextRequest) {
           const customers = await Promise.all(
             group.map(async (passenger) => {
               const existingCustomer = await tx.customer.findFirst({
-                where: { email: passenger.email }
+                where: {
+                  email: passenger.email,
+                  organizationId
+                }
               })
 
               if (existingCustomer) {
@@ -496,6 +560,7 @@ export async function POST(request: NextRequest) {
 
               return tx.customer.create({
                 data: {
+                  organizationId,
                   title: passenger.title,
                   firstName: passenger.firstName,
                   lastName: passenger.lastName,
@@ -513,6 +578,7 @@ export async function POST(request: NextRequest) {
           // Create tour booking for this group
           await tx.tourBooking.create({
             data: {
+              organizationId,
               bookingRef,
               purchaseOrderId: po.id,
               tourPackageId: tourPackage.id,

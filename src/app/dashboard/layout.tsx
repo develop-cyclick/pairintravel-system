@@ -5,6 +5,8 @@ import { AppSidebar } from "@/components/dashboard/app-sidebar"
 import { UserNav } from "@/components/dashboard/user-nav"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
+import { Building2 } from "lucide-react"
 
 export default async function DashboardLayout({
   children
@@ -12,7 +14,7 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   const session = await getServerSession(authOptions)
-  
+
   if (!session) {
     redirect("/login")
   }
@@ -25,7 +27,15 @@ export default async function DashboardLayout({
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-4" />
           <div className="flex flex-1 items-center justify-between">
-            <h1 className="text-xl font-semibold">Flight Booking System</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-semibold">Flight Booking System</h1>
+              {session.user.organizationName && (
+                <Badge variant="outline" className="flex items-center gap-1.5 px-2.5 py-1">
+                  <Building2 className="h-3.5 w-3.5" />
+                  <span className="text-xs font-medium">{session.user.organizationName}</span>
+                </Badge>
+              )}
+            </div>
             <UserNav user={session.user} />
           </div>
         </header>

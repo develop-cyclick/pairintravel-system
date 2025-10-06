@@ -39,3 +39,42 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# test files
+test-*.js
+test-*.html
+test-*.pdf
+*.test.js
+create-test-*.js
+seed-master-data.js
+
+# test outputs
+test-output/
+*.test.pdf
+
+# playwright
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# temporary files
+*.tmp
+*.temp
+temp/
+
+# generated images
+public/images/uploads/
+public/images/temp/
+
+# investigation/planning docs
+CODEBASE_INVESTIGATION_PLAN.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
-import { generatePaymentQR } from "@/lib/qrcode"
+import { generatePaymentQR, generatePaymentVerificationQR } from "@/lib/qrcode"
+import { createPaymentVerification } from "@/lib/payment-verification"
+import { getSessionOrganizationId, verifyOrganizationAccess } from "@/lib/organization"
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,12 +13,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const organizationId = await getSessionOrganizationId()
+
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get("status")
     const page = parseInt(searchParams.get("page") || "1")
     const limit = parseInt(searchParams.get("limit") || "10")
 
-    const where = status ? { status } : {}
+    const where: any = { organizationId }
+    if (status) {
+      where.status = status
+    }
 
     const [invoices, total] = await Promise.all([
       prisma.invoice.findMany({
@@ -68,76 +75,259 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const organizationId = await getSessionOrganizationId()
+
     const body = await request.json()
-    const { bookingId } = body
+    const { purchaseOrderId, bookingId } = body
 
-    // Check if invoice already exists
-    const existingInvoice = await prisma.invoice.findUnique({
-      where: { bookingId }
-    })
-
-    if (existingInvoice) {
-      return NextResponse.json({ error: "Invoice already exists for this booking" }, { status: 400 })
+    if (purchaseOrderId) {
+      // New purchase order-based invoice system
+      return await createPurchaseOrderInvoice(purchaseOrderId, organizationId, session)
+    } else if (bookingId) {
+      // Legacy booking-based invoice system
+      return await createBookingInvoice(bookingId, organizationId, session)
+    } else {
+      return NextResponse.json({ error: "Either purchaseOrderId or bookingId is required" }, { status: 400 })
     }
+  } catch (error) {
+    console.error("Error creating invoice:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
 
-    // Get booking details
-    const booking = await prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: {
-        flight: true,
-        passengers: true
-      }
-    })
+async function createPurchaseOrderInvoice(purchaseOrderId: string, organizationId: string, session: any) {
+  // Check if invoice already exists
+  const existingInvoice = await prisma.invoice.findFirst({
+    where: { purchaseOrderId, organizationId }
+  })
 
-    if (!booking) {
-      return NextResponse.json({ error: "Booking not found" }, { status: 404 })
+  if (existingInvoice) {
+    return NextResponse.json({ error: "Invoice already exists for this purchase order" }, { status: 400 })
+  }
+
+  // Get purchase order details and verify org access
+  const purchaseOrder = await prisma.purchaseOrder.findFirst({
+    where: {
+      id: purchaseOrderId,
+      organizationId
+    },
+    include: {
+      bookings: true,
+      tourBookings: true,
+      department: true,
+      customer: true
     }
+  })
 
-    // Generate invoice number
-    const invoiceNumber = "INV" + Date.now().toString().slice(-8)
+  if (!purchaseOrder) {
+    return NextResponse.json({ error: "Purchase order not found" }, { status: 404 })
+  }
 
-    // Calculate tax (7% VAT for Thailand)
-    const taxRate = 0.07
-    const amount = booking.totalAmount
-    const tax = amount * taxRate
-    const totalAmount = amount + tax
+  // Generate invoice number
+  const invoiceNumber = "INV" + Date.now().toString().slice(-8)
 
-    // Generate QR code
-    const qrCode = await generatePaymentQR({
+  // Calculate airport tax total (not subject to VAT)
+  const totalAirportTax = purchaseOrder.bookings.reduce(
+    (sum: number, booking: any) => sum + (booking.airportTax || 0),
+    0
+  )
+
+  // Calculate tax (7% VAT for Thailand)
+  // IMPORTANT: Airport tax is NOT subject to VAT
+  const taxRate = 0.07
+  const amountBeforeTax = purchaseOrder.totalAmount - totalAirportTax
+  const tax = amountBeforeTax * taxRate
+  const totalAmount = amountBeforeTax + tax + totalAirportTax
+
+  // Store the taxable amount (without airport tax)
+  const amount = amountBeforeTax
+
+  // Create invoice first
+  const invoice = await prisma.invoice.create({
+    data: {
+      organizationId,
       invoiceNumber,
-      amount: totalAmount,
-      bookingRef: booking.bookingRef
-    })
-
-    // Create invoice
-    const invoice = await prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        bookingId,
-        amount,
-        tax,
-        totalAmount,
-        status: "PENDING",
-        qrCode,
-        userId: session.user.id
-      },
-      include: {
-        booking: {
-          include: {
-            flight: true,
-            passengers: {
-              include: {
-                customer: true
+      purchaseOrderId,
+      amount,
+      tax,
+      totalAmount,
+      status: "PENDING",
+      userId: session.user.id
+    },
+    include: {
+      purchaseOrder: {
+        include: {
+          department: true,
+          customer: true,
+          bookings: {
+            include: {
+              passengers: {
+                include: {
+                  customer: true
+                }
+              }
+            }
+          },
+          tourBookings: {
+            include: {
+              tourPackage: true,
+              passengers: {
+                include: {
+                  customer: true
+                }
               }
             }
           }
         }
       }
-    })
+    }
+  })
 
-    return NextResponse.json(invoice)
-  } catch (error) {
-    console.error("Error creating invoice:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  // Create payment verification
+  const paymentVerification = await createPaymentVerification({
+    invoiceId: invoice.id,
+    expirationHours: 72 // 3 days
+  })
+
+  // Generate payment verification QR code
+  const qrCode = await generatePaymentVerificationQR({
+    token: paymentVerification.verificationToken,
+    invoiceNumber,
+    amount: totalAmount,
+    expiresAt: paymentVerification.expiresAt
+  })
+
+  // Update invoice with QR code
+  const updatedInvoice = await prisma.invoice.update({
+    where: { id: invoice.id },
+    data: { qrCode },
+    include: {
+      purchaseOrder: {
+        include: {
+          department: true,
+          customer: true,
+          bookings: {
+            include: {
+              passengers: {
+                include: {
+                  customer: true
+                }
+              }
+            }
+          },
+          tourBookings: {
+            include: {
+              tourPackage: true,
+              passengers: {
+                include: {
+                  customer: true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  })
+
+  return NextResponse.json(updatedInvoice)
+}
+
+async function createBookingInvoice(bookingId: string, organizationId: string, session: any) {
+  // Check if invoice already exists
+  const existingInvoice = await prisma.invoice.findFirst({
+    where: {
+      bookingId,
+      organizationId
+    }
+  })
+
+  if (existingInvoice) {
+    return NextResponse.json({ error: "Invoice already exists for this booking" }, { status: 400 })
   }
+
+  // Get booking details and verify org access
+  const booking = await prisma.booking.findFirst({
+    where: {
+      id: bookingId,
+      organizationId
+    },
+    include: {
+      flight: true,
+      passengers: true
+    }
+  })
+
+  if (!booking) {
+    return NextResponse.json({ error: "Booking not found" }, { status: 404 })
+  }
+
+  // Generate invoice number
+  const invoiceNumber = "INV" + Date.now().toString().slice(-8)
+
+  // Calculate tax (7% VAT for Thailand)
+  const taxRate = 0.07
+  const amount = booking.totalAmount
+  const tax = amount * taxRate
+  const totalAmount = amount + tax
+
+  // Create invoice first
+  const invoice = await prisma.invoice.create({
+    data: {
+      organizationId,
+      invoiceNumber,
+      bookingId,
+      amount,
+      tax,
+      totalAmount,
+      status: "PENDING",
+      userId: session.user.id
+    },
+    include: {
+      booking: {
+        include: {
+          flight: true,
+          passengers: {
+            include: {
+              customer: true
+            }
+          }
+        }
+      }
+    }
+  })
+
+  // Create payment verification
+  const paymentVerification = await createPaymentVerification({
+    invoiceId: invoice.id,
+    expirationHours: 72 // 3 days
+  })
+
+  // Generate payment verification QR code
+  const qrCode = await generatePaymentVerificationQR({
+    token: paymentVerification.verificationToken,
+    invoiceNumber,
+    amount: totalAmount,
+    expiresAt: paymentVerification.expiresAt
+  })
+
+  // Update invoice with QR code
+  const updatedInvoice = await prisma.invoice.update({
+    where: { id: invoice.id },
+    data: { qrCode },
+    include: {
+      booking: {
+        include: {
+          flight: true,
+          passengers: {
+            include: {
+              customer: true
+            }
+          }
+        }
+      }
+    }
+  })
+
+  return NextResponse.json(updatedInvoice)
 }

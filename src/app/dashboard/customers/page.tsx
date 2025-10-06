@@ -63,6 +63,8 @@ interface Customer {
   phone: string
   nationalId?: string
   passportNo?: string
+  governmentId?: string
+  governmentIdExpiryDate?: string
   dateOfBirth: string
   nationality: string
   createdAt: string
@@ -89,6 +91,8 @@ export default function CustomersPage() {
     phone: "",
     nationalId: "",
     passportNo: "",
+    governmentId: "",
+    governmentIdExpiryDate: "",
     dateOfBirth: "",
     nationality: "Thai"
   })
@@ -163,6 +167,8 @@ export default function CustomersPage() {
         phone: "",
         nationalId: "",
         passportNo: "",
+        governmentId: "",
+        governmentIdExpiryDate: "",
         dateOfBirth: "",
         nationality: "Thai"
       })
@@ -388,6 +394,24 @@ export default function CustomersPage() {
                     })}
                   />
                 </div>
+                <div>
+                  <Label htmlFor="governmentId">Government ID</Label>
+                  <Input
+                    id="governmentId"
+                    value={newCustomer.governmentId}
+                    onChange={(e) => setNewCustomer({...newCustomer, governmentId: e.target.value})}
+                    placeholder="Driver's license, military ID, etc."
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="governmentIdExpiryDate">Government ID Expiry Date</Label>
+                  <Input
+                    id="governmentIdExpiryDate"
+                    type="date"
+                    value={newCustomer.governmentIdExpiryDate}
+                    onChange={(e) => setNewCustomer({...newCustomer, governmentIdExpiryDate: e.target.value})}
+                  />
+                </div>
               </div>
               <Button onClick={handleAddCustomer} disabled={isSubmitting}>
                 {isSubmitting ? "Adding..." : "Add Customer"}
@@ -570,9 +594,29 @@ export default function CustomersPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium">ID/Passport</p>
+                  <p className="text-sm font-medium">Nationality</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedCustomer.nationality}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">National ID / Passport</p>
                   <p className="text-sm text-muted-foreground">
                     {selectedCustomer.nationalId || selectedCustomer.passportNo || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Government ID</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedCustomer.governmentId || "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Government ID Expiry</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedCustomer.governmentIdExpiryDate
+                      ? format(new Date(selectedCustomer.governmentIdExpiryDate), "MMMM dd, yyyy")
+                      : "N/A"}
                   </p>
                 </div>
                 <div>
@@ -698,6 +742,24 @@ export default function CustomersPage() {
                       ...editingCustomer,
                       [editingCustomer.nationality === "Thai" ? "nationalId" : "passportNo"]: e.target.value
                     })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-governmentId">Government ID</Label>
+                  <Input
+                    id="edit-governmentId"
+                    value={editingCustomer.governmentId || ""}
+                    onChange={(e) => setEditingCustomer({...editingCustomer, governmentId: e.target.value})}
+                    placeholder="Driver's license, military ID, etc."
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-governmentIdExpiryDate">Government ID Expiry Date</Label>
+                  <Input
+                    id="edit-governmentIdExpiryDate"
+                    type="date"
+                    value={editingCustomer.governmentIdExpiryDate ? format(new Date(editingCustomer.governmentIdExpiryDate), "yyyy-MM-dd") : ""}
+                    onChange={(e) => setEditingCustomer({...editingCustomer, governmentIdExpiryDate: e.target.value})}
                   />
                 </div>
               </div>

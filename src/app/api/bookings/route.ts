@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
+import { getSessionOrganizationId } from "@/lib/organization"
 import { z } from "zod"
 
 const createBookingSchema = z.object({
@@ -34,12 +35,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Get organization ID for multi-tenant filtering
+    const organizationId = await getSessionOrganizationId()
+
     const searchParams = request.nextUrl.searchParams
     const page = parseInt(searchParams.get("page") || "1")
     const limit = parseInt(searchParams.get("limit") || "10")
     const status = searchParams.get("status")
 
-    const where = status ? { status } : {}
+    const where: any = { organizationId }
+    if (status) {
+      where.status = status
+    }
 
     const [bookings, total] = await Promise.all([
       prisma.booking.findMany({
@@ -50,8 +57,7 @@ export async function GET(request: NextRequest) {
           department: true,
           passengers: {
             include: {
-              customer: true,
-              flight: true // Include individual flight info
+              customer: true
             }
           },
           invoice: true
@@ -76,6 +82,9 @@ export async function POST(request: NextRequest) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // Get organization ID for multi-tenant support
+    const organizationId = await getSessionOrganizationId()
 
     const body = await request.json()
     const validatedData = createBookingSchema.parse(body)
@@ -106,7 +115,10 @@ export async function POST(request: NextRequest) {
       const customers = await Promise.all(
         validatedData.passengers.map(async (passenger) => {
           const existingCustomer = await prisma.customer.findFirst({
-            where: { email: passenger.email }
+            where: {
+              email: passenger.email,
+              organizationId
+            }
           })
 
           if (existingCustomer) {
@@ -128,6 +140,7 @@ export async function POST(request: NextRequest) {
 
           return prisma.customer.create({
             data: {
+              organizationId,
               title: passenger.title,
               firstName: passenger.firstName,
               lastName: passenger.lastName,
@@ -151,6 +164,7 @@ export async function POST(request: NextRequest) {
       // Create booking
       const booking = await prisma.booking.create({
         data: {
+          organizationId,
           bookingRef,
           type: validatedData.type,
           status: "CONFIRMED",
@@ -166,7 +180,9 @@ export async function POST(request: NextRequest) {
             create: customers.map((customer, index) => ({
               customerId: customer.id,
               seatNumber: `${index + 1}A`,
-              price: flight.price
+              individualPrice: flight.price,
+              individualCost: body.cost ? body.cost / validatedData.passengers.length : flight.price * 0.8,
+              individualServiceFee: body.profit ? body.profit / validatedData.passengers.length : flight.price * 0.2
             }))
           }
         },
@@ -175,8 +191,7 @@ export async function POST(request: NextRequest) {
           department: true,
           passengers: {
             include: {
-              customer: true,
-              flight: true
+              customer: true
             }
           }
         }
@@ -235,7 +250,10 @@ export async function POST(request: NextRequest) {
       const customers = await Promise.all(
         validatedData.passengers.map(async (passenger) => {
           const existingCustomer = await prisma.customer.findFirst({
-            where: { email: passenger.email }
+            where: {
+              email: passenger.email,
+              organizationId
+            }
           })
 
           if (existingCustomer) {
@@ -256,6 +274,7 @@ export async function POST(request: NextRequest) {
 
           return prisma.customer.create({
             data: {
+              organizationId,
               title: passenger.title,
               firstName: passenger.firstName,
               lastName: passenger.lastName,
@@ -281,9 +300,10 @@ export async function POST(request: NextRequest) {
         const customer = customers[index]
         return {
           customerId: customer.id,
-          flightId: passenger.flightId,
           seatNumber: `${(index % 50) + 1}A`, // Simple seat assignment
-          price: flight.price
+          individualPrice: flight.price,
+          individualCost: body.cost ? body.cost / validatedData.passengers.length : flight.price * 0.8,
+          individualServiceFee: body.profit ? body.profit / validatedData.passengers.length : flight.price * 0.2
         }
       })
 
@@ -292,6 +312,7 @@ export async function POST(request: NextRequest) {
         // Create the booking
         const newBooking = await tx.booking.create({
           data: {
+            organizationId,
             bookingRef,
             type: validatedData.type,
             status: "CONFIRMED",
@@ -311,8 +332,7 @@ export async function POST(request: NextRequest) {
             department: true,
             passengers: {
               include: {
-                customer: true,
-                flight: true
+                customer: true
               }
             }
           }
@@ -337,7 +357,7 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: error.errors }, { status: 400 })
+      return NextResponse.json({ error: "Validation error", details: error.issues }, { status: 400 })
     }
     console.error("Error creating booking:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

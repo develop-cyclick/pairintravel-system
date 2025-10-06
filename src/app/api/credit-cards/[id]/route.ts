@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { z } from "zod"
+import { getSessionOrganizationId, verifyOrganizationAccess } from "@/lib/organization"
 
 const updateCreditCardSchema = z.object({
   cardName: z.string().min(1).optional(),
@@ -22,8 +23,13 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const creditCard = await prisma.creditCard.findUnique({
-      where: { id: params.id },
+    const organizationId = await getSessionOrganizationId()
+
+    const creditCard = await prisma.creditCard.findFirst({
+      where: {
+        id: params.id,
+        organizationId
+      },
       include: {
         department: true,
         transactions: {
@@ -68,25 +74,34 @@ export async function PUT(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const body = await request.json()
-    const validatedData = updateCreditCardSchema.parse(body)
-
-    // Get current card data
+    // Get current card data and verify organization access
     const currentCard = await prisma.creditCard.findUnique({
-      where: { id: params.id }
+      where: { id: params.id },
+      select: {
+        id: true,
+        organizationId: true,
+        creditLimit: true,
+        availableCredit: true
+      }
     })
 
     if (!currentCard) {
       return NextResponse.json({ error: "Credit card not found" }, { status: 404 })
     }
 
+    // Verify organization access
+    await verifyOrganizationAccess(currentCard.organizationId)
+
+    const body = await request.json()
+    const validatedData = updateCreditCardSchema.parse(body)
+
     // If credit limit is being changed, adjust available credit accordingly
     let updateData: any = { ...validatedData }
-    
+
     if (validatedData.creditLimit && validatedData.creditLimit !== currentCard.creditLimit) {
       const usedCredit = currentCard.creditLimit - currentCard.availableCredit
       updateData.availableCredit = validatedData.creditLimit - usedCredit
-      
+
       // Create adjustment transaction
       await prisma.creditCardTransaction.create({
         data: {
@@ -134,10 +149,17 @@ export async function DELETE(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Check if card has transactions (besides initial)
+    // Check if card has transactions (besides initial) and verify organization access
     const card = await prisma.creditCard.findUnique({
       where: { id: params.id },
       include: {
+        _count: {
+          select: { transactions: true }
+        }
+      },
+      select: {
+        id: true,
+        organizationId: true,
         _count: {
           select: { transactions: true }
         }
@@ -147,6 +169,9 @@ export async function DELETE(
     if (!card) {
       return NextResponse.json({ error: "Credit card not found" }, { status: 404 })
     }
+
+    // Verify organization access
+    await verifyOrganizationAccess(card.organizationId)
 
     if (card._count.transactions > 1) {
       // Instead of deleting, just deactivate

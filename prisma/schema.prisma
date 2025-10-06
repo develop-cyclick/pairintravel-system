@@ -7,147 +7,204 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  password      String
-  name          String
-  role          Role      @default(AGENT)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  bookings      Booking[]
-  invoices      Invoice[]
-  purchaseOrders PurchaseOrder[]
+model Organization {
+  id                String              @id @default(cuid())
+  code              String              @unique
+  name              String
+  nameTh            String?
+  address           String?
+  phone             String?
+  email             String?
+  taxId             String?
+  logo              String?
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  users             User[]
+  customers         Customer[]
+  purchaseOrders    PurchaseOrder[]
+  bookings          Booking[]
+  invoices          Invoice[]
+  creditCards       CreditCard[]
+  companySettings   CompanySettings[]
   validationReports ValidationReport[]
+  tourBookings      TourBooking[]
+
+  @@index([code])
+  @@index([isActive])
+}
+
+model User {
+  id                String             @id @default(cuid())
+  email             String             @unique
+  password          String
+  name              String
+  role              Role               @default(AGENT)
+  organizationId    String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  organization      Organization       @relation(fields: [organizationId], references: [id])
+  bookings          Booking[]
+  invoices          Invoice[]
+  purchaseOrders    PurchaseOrder[]
+  validationReports ValidationReport[]
+
+  @@index([organizationId])
 }
 
 model Customer {
-  id            String    @id @default(cuid())
-  title         String
-  firstName     String
-  lastName      String
-  email         String    @unique
-  phone         String
-  passportNo    String?
-  nationalId    String?
-  dateOfBirth   DateTime
-  nationality   String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  bookings      BookingPassenger[]
-  tourPassengers TourPassenger[]
-  purchaseOrders PurchaseOrder[]
+  id                      String             @id @default(cuid())
+  title                   String
+  firstName               String
+  lastName                String
+  email                   String             @unique
+  phone                   String
+  passportNo              String?
+  nationalId              String?
+  governmentId            String?
+  governmentIdExpiryDate  DateTime?
+  dateOfBirth             DateTime
+  nationality             String
+  organizationId          String
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  paymentTerms            Int?
+  organization            Organization       @relation(fields: [organizationId], references: [id])
+  bookings                BookingPassenger[]
+  purchaseOrders          PurchaseOrder[]
+  tourPassengers          TourPassenger[]
+
+  @@index([organizationId])
 }
 
 model Flight {
-  id            String    @id @default(cuid())
-  flightNumber  String    @unique
-  airline       String
-  origin        String
-  destination   String
-  departureTime DateTime
-  arrivalTime   DateTime
-  price         Float
+  id             String       @id @default(cuid())
+  flightNumber   String       @unique
+  airline        String
+  origin         String
+  destination    String
+  departureTime  DateTime
+  arrivalTime    DateTime
+  price          Float
   availableSeats Int
-  totalSeats    Int
-  status        FlightStatus @default(SCHEDULED)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  bookings      Booking[]
+  totalSeats     Int
+  status         FlightStatus @default(SCHEDULED)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  bookings       Booking[]
 }
 
 model Department {
-  id            String    @id @default(cuid())
-  code          String    @unique
-  nameEn        String
-  nameTh        String
-  taxId         String?
-  ministry      String?
-  address       String?
-  phone         String?
-  email         String?
-  contactPerson String?
-  budget        Float?
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  bookings      Booking[]
+  id             String          @id @default(cuid())
+  code           String          @unique
+  nameEn         String
+  nameTh         String
+  ministry       String?
+  address        String?
+  phone          String?
+  email          String?
+  contactPerson  String?
+  budget         Float?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  taxId          String?
+  paymentTerms   Int?
+  bookings       Booking[]
+  creditCards    CreditCard[]
   purchaseOrders PurchaseOrder[]
-  creditCards   CreditCard[]
-  
+
   @@index([code])
   @@index([isActive])
 }
 
 model PurchaseOrder {
-  id            String    @id @default(cuid())
-  poNumber      String    @unique
-  type          POType
-  status        POStatus  @default(PENDING)
-  departmentId  String?
-  department    Department? @relation(fields: [departmentId], references: [id])
-  customerId    String?
-  customer      Customer? @relation(fields: [customerId], references: [id])
-  totalAmount   Float
-  cost          Float
-  serviceFee    Float
-  profit        Float
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-  bookings      Booking[]
-  tourBookings  TourBooking[]
-  invoices      Invoice[]
+  id                     String                  @id @default(cuid())
+  poNumber               String                  @unique
+  type                   POType
+  status                 POStatus                @default(PENDING)
+  departmentId           String?
+  customerId             String?
+  totalAmount            Float
+  cost                   Float
+  serviceFee             Float
+  profit                 Float
+  userId                 String
+  organizationId         String
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  organization           Organization            @relation(fields: [organizationId], references: [id])
+  bookings               Booking[]
   creditCardTransactions CreditCardTransaction[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  invoices               Invoice[]
+  customer               Customer?               @relation(fields: [customerId], references: [id])
+  department             Department?             @relation(fields: [departmentId], references: [id])
+  user                   User                    @relation(fields: [userId], references: [id])
+  tourBookings           TourBooking[]
 
   @@index([poNumber])
   @@index([userId])
   @@index([departmentId])
   @@index([customerId])
+  @@index([organizationId])
 }
 
 model Booking {
-  id            String    @id @default(cuid())
-  bookingRef    String    @unique
-  purchaseOrderId String?
-  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
-  type          BookingType
-  status        BookingStatus @default(PENDING)
-
-  // Flight Information
-  flightNumber  String
-  airline       String
-  origin        String
-  destination   String
-  departureDate DateTime
-  arrivalDate   DateTime
-
-  // Cost Information (for the entire booking)
-  basePrice     Float     // Base price per passenger
-  totalCost     Float     // Total cost for all passengers
-  totalServiceFee Float   // Total service fee for all passengers
-  totalAmount   Float     // Final amount (basePrice * passengers + fees)
-
-  // Validation Information
-  airlinePNR    String?   // Airline's PNR/Confirmation number
-  ticketNumber  String?   // Ticket number from airline
-  isValidated   Boolean   @default(false)
-  validatedAt   DateTime?
-  validatedBy   String?
-
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-  flightId      String?   // Optional - reference to flight if exists
-  flight        Flight?   @relation(fields: [flightId], references: [id])
-  departmentId  String?
-  department    Department? @relation(fields: [departmentId], references: [id])
-  passengers    BookingPassenger[]
-  invoice       Invoice?
-  rescheduleHistory RescheduleHistory[]
-  validationResults ValidationResult[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                  String              @id @default(cuid())
+  bookingRef          String              @unique
+  purchaseOrderId     String?
+  type                BookingType
+  status              BookingStatus       @default(PENDING)
+  flightNumber        String
+  airline             String
+  origin              String
+  destination         String
+  departureDate       DateTime
+  basePrice           Float
+  totalCost           Float
+  totalServiceFee     Float
+  totalAmount         Float
+  userId              String
+  flightId            String?
+  departmentId        String?
+  organizationId      String
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  airlinePNR          String?
+  isValidated         Boolean             @default(false)
+  ticketNumber        String?
+  validatedAt         DateTime?
+  validatedBy         String?
+  changeFee           Float               @default(0)
+  changeReason        String?
+  isChange            Boolean             @default(false)
+  originalBookingId   String?
+  airportTax          Float               @default(0)
+  baggageCharge       Float               @default(0)
+  mealCharge          Float               @default(0)
+  seatSelectionCharge Float               @default(0)
+  // Return flight fields for round trip bookings
+  returnBookingRef    String?
+  returnFlightNumber  String?
+  returnAirline       String?
+  returnOrigin        String?
+  returnDestination   String?
+  returnDepartureDate DateTime?
+  returnAirportTax    Float               @default(0)
+  returnBaggageCharge Float               @default(0)
+  returnMealCharge    Float               @default(0)
+  returnSeatSelectionCharge Float         @default(0)
+  organization        Organization        @relation(fields: [organizationId], references: [id])
+  department          Department?         @relation(fields: [departmentId], references: [id])
+  flight              Flight?             @relation(fields: [flightId], references: [id])
+  originalBooking     Booking?            @relation("BookingChanges", fields: [originalBookingId], references: [id])
+  changeBookings      Booking[]           @relation("BookingChanges")
+  purchaseOrder       PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  user                User                @relation(fields: [userId], references: [id])
+  passengers          BookingPassenger[]
+  invoice             Invoice?
+  rescheduleHistory   RescheduleHistory[]
+  validationResults   ValidationResult[]
 
   @@index([bookingRef])
   @@index([userId])
@@ -157,172 +214,319 @@ model Booking {
   @@index([airlinePNR])
   @@index([ticketNumber])
   @@index([isValidated])
+  @@index([originalBookingId])
+  @@index([isChange])
+  @@index([returnBookingRef])
+  @@index([organizationId])
 }
 
 model BookingPassenger {
-  id          String    @id @default(cuid())
-  bookingId   String
-  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  customerId  String
-  customer    Customer  @relation(fields: [customerId], references: [id])
-  seatNumber  String?
-  // Per-passenger calculated amounts
-  individualPrice Float  // Price for this passenger
-  individualCost Float   // Cost allocated to this passenger
-  individualServiceFee Float // Service fee allocated to this passenger
-  
+  id                   String   @id @default(cuid())
+  bookingId            String
+  customerId           String
+  seatNumber           String?
+  individualPrice      Float
+  individualCost       Float
+  individualServiceFee Float
+  booking              Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customer             Customer @relation(fields: [customerId], references: [id])
+
   @@unique([bookingId, customerId])
 }
 
 model TourPackage {
-  id            String    @id @default(cuid())
-  tourId        String    @unique
-  name          String
-  description   String?
-  destination   String
-  duration      Int       // Duration in days
-  price         Float
-  maxCapacity   Int
-  includes      String[]  // Array of included services
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  tourBookings  TourBooking[]
+  id           String        @id @default(cuid())
+  tourId       String        @unique
+  name         String
+  description  String?
+  destination  String
+  duration     Int
+  price        Float
+  maxCapacity  Int
+  includes     String[]
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  tourBookings TourBooking[]
 
   @@index([tourId])
   @@index([isActive])
 }
 
 model TourBooking {
-  id              String    @id @default(cuid())
-  bookingRef      String    @unique
-  purchaseOrderId String
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
-  tourPackageId   String
-  tourPackage     TourPackage @relation(fields: [tourPackageId], references: [id])
-  passengers      TourPassenger[]
-  totalAmount     Float
-  status          BookingStatus @default(PENDING)
-  
-  // Tour Program Details
-  tourProgramDetails String? @db.Text
-  departureDate   DateTime?
-  returnDate      DateTime?
-  pickupLocation  String?
-  pickupTime      String?
-  specialRequirements String? @db.Text
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                  String          @id @default(cuid())
+  bookingRef          String          @unique
+  purchaseOrderId     String
+  tourPackageId       String
+  totalAmount         Float
+  status              BookingStatus   @default(PENDING)
+  organizationId      String
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  departureDate       DateTime?
+  pickupLocation      String?
+  pickupTime          String?
+  returnDate          DateTime?
+  specialRequirements String?
+  tourProgramDetails  String?
+  organization        Organization    @relation(fields: [organizationId], references: [id])
+  purchaseOrder       PurchaseOrder   @relation(fields: [purchaseOrderId], references: [id])
+  tourPackage         TourPackage     @relation(fields: [tourPackageId], references: [id])
+  passengers          TourPassenger[]
 
   @@index([purchaseOrderId])
   @@index([tourPackageId])
+  @@index([organizationId])
 }
 
 model TourPassenger {
-  id            String    @id @default(cuid())
-  tourBookingId String
-  tourBooking   TourBooking @relation(fields: [tourBookingId], references: [id], onDelete: Cascade)
-  customerId    String
-  customer      Customer  @relation(fields: [customerId], references: [id])
+  id              String      @id @default(cuid())
+  tourBookingId   String
+  customerId      String
   specialRequests String?
+  customer        Customer    @relation(fields: [customerId], references: [id])
+  tourBooking     TourBooking @relation(fields: [tourBookingId], references: [id], onDelete: Cascade)
 
   @@unique([tourBookingId, customerId])
 }
 
 model Invoice {
-  id            String    @id @default(cuid())
-  invoiceNumber String    @unique
-  bookingId     String?   @unique
-  booking       Booking?  @relation(fields: [bookingId], references: [id])
-  purchaseOrderId String?
-  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
-  amount        Float
-  tax           Float
-  totalAmount   Float
-  status        InvoiceStatus @default(PENDING)
-  qrCode        String?   @db.Text
-  pdfUrl        String?
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-  paidAt        DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
+  id                   String                @id @default(cuid())
+  invoiceNumber        String                @unique
+  bookingId            String?               @unique
+  purchaseOrderId      String?
+  amount               Float
+  tax                  Float
+  totalAmount          Float
+  status               InvoiceStatus         @default(PENDING)
+  qrCode               String?
+  pdfUrl               String?
+  userId               String
+  organizationId       String
+  paidAt               DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  organization         Organization          @relation(fields: [organizationId], references: [id])
+  booking              Booking?              @relation(fields: [bookingId], references: [id])
+  purchaseOrder        PurchaseOrder?        @relation(fields: [purchaseOrderId], references: [id])
+  user                 User                  @relation(fields: [userId], references: [id])
+  paymentVerifications PaymentVerification[]
+
   @@index([invoiceNumber])
   @@index([purchaseOrderId])
+  @@index([organizationId])
+}
+
+model PaymentVerification {
+  id                String                    @id @default(cuid())
+  invoiceId         String
+  verificationToken String                    @unique
+  paymentMethod     String?
+  paymentAmount     Float?
+  paymentDate       DateTime?
+  paymentReference  String?
+  paymentNotes      String?
+  status            PaymentVerificationStatus @default(PENDING)
+  verifiedBy        String?
+  verifiedAt        DateTime?
+  verificationNotes String?
+  passengerName     String?
+  passengerEmail    String?
+  passengerPhone    String?
+  ipAddress         String?
+  userAgent         String?
+  submittedAt       DateTime?
+  expiresAt         DateTime
+  attachmentUrls    String[]
+  attachmentMetadata Json?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  invoice           Invoice                   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([verificationToken])
+  @@index([status])
 }
 
 model RescheduleHistory {
-  id            String    @id @default(cuid())
-  bookingId     String
-  booking       Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  oldFlightId   String
-  newFlightId   String
-  oldDeparture  DateTime
-  newDeparture  DateTime
-  priceDiff     Float
-  reason        String?
-  createdAt     DateTime  @default(now())
-  
+  id           String   @id @default(cuid())
+  bookingId    String
+  oldFlightId  String
+  newFlightId  String
+  oldDeparture DateTime
+  newDeparture DateTime
+  priceDiff    Float
+  reason       String?
+  createdAt    DateTime @default(now())
+  booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
   @@index([bookingId])
 }
 
 model Report {
-  id            String    @id @default(cuid())
-  type          ReportType
-  period        ReportPeriod
-  startDate     DateTime
-  endDate       DateTime
-  data          Json
-  generatedBy   String
-  createdAt     DateTime  @default(now())
-  
+  id          String       @id @default(cuid())
+  type        ReportType
+  period      ReportPeriod
+  startDate   DateTime
+  endDate     DateTime
+  data        Json
+  generatedBy String
+  createdAt   DateTime     @default(now())
+
   @@index([type, period])
   @@index([startDate, endDate])
 }
 
 model CreditCard {
-  id                String    @id @default(cuid())
-  cardNumber        String    @unique
-  cardName          String
-  cardType          CardType
-  cardHolder        String
-  expiryMonth       Int
-  expiryYear        Int
-  creditLimit       Float
-  availableCredit   Float
-  isActive          Boolean   @default(true)
-  departmentId      String?
-  department        Department? @relation(fields: [departmentId], references: [id])
-  transactions      CreditCardTransaction[]
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
+  id              String                  @id @default(cuid())
+  cardNumber      String                  @unique
+  cardName        String
+  cardType        CardType
+  cardHolder      String
+  expiryMonth     Int
+  expiryYear      Int
+  creditLimit     Float
+  availableCredit Float
+  isActive        Boolean                 @default(true)
+  departmentId    String?
+  organizationId  String
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  organization    Organization            @relation(fields: [organizationId], references: [id])
+  department      Department?             @relation(fields: [departmentId], references: [id])
+  transactions    CreditCardTransaction[]
+
   @@index([cardNumber])
   @@index([departmentId])
   @@index([isActive])
+  @@index([organizationId])
 }
 
 model CreditCardTransaction {
-  id              String    @id @default(cuid())
+  id              String          @id @default(cuid())
   cardId          String
-  card            CreditCard @relation(fields: [cardId], references: [id])
   purchaseOrderId String?
-  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
   transactionType TransactionType
   amount          Float
   description     String
   referenceNumber String?
   balanceBefore   Float
   balanceAfter    Float
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime        @default(now())
   createdBy       String?
-  
+  card            CreditCard      @relation(fields: [cardId], references: [id])
+  purchaseOrder   PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [id])
+
   @@index([cardId])
   @@index([purchaseOrderId])
   @@index([transactionType])
   @@index([createdAt])
+}
+
+model Destination {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  fullName  String?
+  city      String
+  country   String   @default("Thailand")
+  timezone  String?
+  isActive  Boolean  @default(true)
+  isPopular Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+  @@index([isPopular])
+}
+
+model Airline {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  fullName  String?
+  country   String   @default("Thailand")
+  logo      String?
+  website   String?
+  isActive  Boolean  @default(true)
+  isPopular Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+  @@index([isPopular])
+}
+
+model ValidationReport {
+  id               String             @id @default(cuid())
+  reportNumber     String             @unique
+  fileName         String
+  fileUrl          String?
+  fileType         String
+  totalRecords     Int
+  matchedRecords   Int
+  unmatchedRecords Int
+  partialMatches   Int
+  status           ValidationStatus   @default(PROCESSING)
+  uploadedBy       String
+  organizationId   String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  organization     Organization       @relation(fields: [organizationId], references: [id])
+  user             User               @relation(fields: [uploadedBy], references: [id])
+  results          ValidationResult[]
+
+  @@index([reportNumber])
+  @@index([status])
+  @@index([uploadedBy])
+  @@index([organizationId])
+}
+
+model ValidationResult {
+  id            String           @id @default(cuid())
+  reportId      String
+  bookingId     String?
+  airlineRef    String
+  ticketNumber  String?
+  passengerName String
+  flightNumber  String
+  flightDate    DateTime
+  amount        Float?
+  matchStatus   MatchStatus
+  matchScore    Float?
+  matchDetails  Json?
+  isApproved    Boolean          @default(false)
+  approvedBy    String?
+  approvedAt    DateTime?
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  booking       Booking?         @relation(fields: [bookingId], references: [id])
+  report        ValidationReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([bookingId])
+  @@index([matchStatus])
+}
+
+model CompanySettings {
+  id             String       @id @default(cuid())
+  organizationId String
+  companyName    String
+  companyNameTh  String
+  companyAddress String
+  companyPhone   String
+  companyEmail   String
+  companyTaxId   String
+  logo           String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId])
+  @@index([organizationId])
 }
 
 enum Role {
@@ -369,6 +573,13 @@ enum InvoiceStatus {
   REFUNDED
 }
 
+enum PaymentVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
 enum ReportType {
   BOOKING
   REVENUE
@@ -398,60 +609,6 @@ enum TransactionType {
   ADJUSTMENT
 }
 
-model ValidationReport {
-  id            String    @id @default(cuid())
-  reportNumber  String    @unique
-  fileName      String
-  fileUrl       String?
-  fileType      String    // CSV or EXCEL
-  totalRecords  Int
-  matchedRecords Int
-  unmatchedRecords Int
-  partialMatches Int
-  status        ValidationStatus @default(PROCESSING)
-  uploadedBy    String
-  user          User      @relation(fields: [uploadedBy], references: [id])
-  results       ValidationResult[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  @@index([reportNumber])
-  @@index([status])
-  @@index([uploadedBy])
-}
-
-model ValidationResult {
-  id            String    @id @default(cuid())
-  reportId      String
-  report        ValidationReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  bookingId     String?
-  booking       Booking?  @relation(fields: [bookingId], references: [id])
-
-  // Data from airline file
-  airlineRef    String    // PNR or booking reference from airline
-  ticketNumber  String?
-  passengerName String
-  flightNumber  String
-  flightDate    DateTime
-  amount        Float?
-
-  // Matching results
-  matchStatus   MatchStatus
-  matchScore    Float?    // Confidence score 0-100
-  matchDetails  Json?     // Details of what matched/didn't match
-  isApproved    Boolean   @default(false)
-  approvedBy    String?
-  approvedAt    DateTime?
-  notes         String?
-
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  @@index([reportId])
-  @@index([bookingId])
-  @@index([matchStatus])
-}
-
 enum ValidationStatus {
   PROCESSING
   COMPLETED
@@ -460,10 +617,10 @@ enum ValidationStatus {
 }
 
 enum MatchStatus {
-  MATCHED       // Full match found
-  PARTIAL       // Partial match (needs review)
-  UNMATCHED     // No match found
-  DUPLICATE     // Multiple matches found
-  APPROVED      // Manually approved
-  REJECTED      // Manually rejected
+  MATCHED
+  PARTIAL
+  UNMATCHED
+  DUPLICATE
+  APPROVED
+  REJECTED
 }

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { z } from "zod"
+import { getSessionOrganizationId, verifyOrganizationAccess } from "@/lib/organization"
 
 const updateCustomerSchema = z.object({
   title: z.string().optional(),
@@ -12,6 +13,8 @@ const updateCustomerSchema = z.object({
   phone: z.string().optional(),
   nationalId: z.string().nullable().optional(),
   passportNo: z.string().nullable().optional(),
+  governmentId: z.string().nullable().optional(),
+  governmentIdExpiryDate: z.string().nullable().optional(),
   dateOfBirth: z.string().optional(),
   nationality: z.string().optional()
 })
@@ -26,8 +29,13 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const customer = await prisma.customer.findUnique({
-      where: { id: params.id },
+    const organizationId = await getSessionOrganizationId()
+
+    const customer = await prisma.customer.findFirst({
+      where: {
+        id: params.id,
+        organizationId
+      },
       include: {
         bookings: {
           include: {
@@ -63,14 +71,29 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const organizationId = await getSessionOrganizationId()
+
+    // Verify customer belongs to user's organization
+    const existing = await prisma.customer.findUnique({
+      where: { id: params.id },
+      select: { organizationId: true }
+    })
+
+    if (!existing) {
+      return NextResponse.json({ error: "Customer not found" }, { status: 404 })
+    }
+
+    await verifyOrganizationAccess(existing.organizationId)
+
     const body = await request.json()
     const validatedData = updateCustomerSchema.parse(body)
 
-    // Check if email is being changed and if it already exists
+    // Check if email is being changed and if it already exists in this organization
     if (validatedData.email) {
       const existingCustomer = await prisma.customer.findFirst({
         where: {
           email: validatedData.email,
+          organizationId,
           NOT: { id: params.id }
         }
       })
@@ -84,10 +107,16 @@ export async function PUT(
       ...validatedData,
       nationalId: validatedData.nationalId === "" ? null : validatedData.nationalId,
       passportNo: validatedData.passportNo === "" ? null : validatedData.passportNo,
+      governmentId: validatedData.governmentId === "" ? null : validatedData.governmentId,
+      governmentIdExpiryDate: validatedData.governmentIdExpiryDate === "" ? null : validatedData.governmentIdExpiryDate,
     }
 
     if (validatedData.dateOfBirth) {
       updateData.dateOfBirth = new Date(validatedData.dateOfBirth)
+    }
+
+    if (validatedData.governmentIdExpiryDate && validatedData.governmentIdExpiryDate !== "") {
+      updateData.governmentIdExpiryDate = new Date(validatedData.governmentIdExpiryDate)
     }
 
     const customer = await prisma.customer.update({
@@ -115,10 +144,17 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check if customer has any bookings
+    // Check if customer has any bookings and verify organization access
     const customer = await prisma.customer.findUnique({
       where: { id: params.id },
       include: {
+        _count: {
+          select: { bookings: true }
+        }
+      },
+      select: {
+        id: true,
+        organizationId: true,
         _count: {
           select: { bookings: true }
         }
@@ -129,9 +165,12 @@ export async function DELETE(
       return NextResponse.json({ error: "Customer not found" }, { status: 404 })
     }
 
+    // Verify organization access
+    await verifyOrganizationAccess(customer.organizationId)
+
     if (customer._count.bookings > 0) {
-      return NextResponse.json({ 
-        error: "Cannot delete customer with existing bookings" 
+      return NextResponse.json({
+        error: "Cannot delete customer with existing bookings"
       }, { status: 400 })
     }
 

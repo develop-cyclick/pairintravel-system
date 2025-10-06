@@ -64,24 +64,37 @@ interface BookingData {
   origin: string
   destination: string
   departureDate: string
-  arrivalDate: string
-  basePrice: number
-  totalCost: number
-  totalServiceFee: number
+  // New pricing model
+  costPerPassenger: number
+  serviceFeePerPassenger: number
+  basePrice: number  // Auto-calculated: costPerPassenger + serviceFeePerPassenger
+  totalCost: number  // Auto-calculated: costPerPassenger * passengers
+  totalServiceFee: number  // Auto-calculated: serviceFeePerPassenger * passengers
+  totalAmount: number  // Auto-calculated: basePrice * passengers
   // Payment information
   paymentCardId?: string
   paymentCardNumber?: string
   // Return flight information for round trips
   returnBookingRef?: string
   returnFlightNumber?: string
+  returnAirline?: string
+  returnOrigin?: string
+  returnDestination?: string
   returnDepartureDate?: string
-  returnArrivalDate?: string
-  returnBasePrice?: number
-  returnTotalCost?: number
-  returnServiceFee?: number
+  returnCostPerPassenger?: number
+  returnServiceFeePerPassenger?: number
+  returnBasePrice?: number  // Auto-calculated
+  returnTotalCost?: number  // Auto-calculated
+  returnServiceFee?: number  // Auto-calculated
+  returnTotalAmount?: number  // Auto-calculated
   // Return flight payment (can be different card)
   returnPaymentCardId?: string
   returnPaymentCardNumber?: string
+  // Additional charges for return flight
+  returnBaggageCharge?: number
+  returnMealCharge?: number
+  returnSeatSelectionCharge?: number
+  returnAirportTax?: number
   passengers: PassengerData[]
 }
 
@@ -103,6 +116,11 @@ export default function NewPurchaseOrderPage() {
   const [availableCreditCards, setAvailableCreditCards] = useState<CreditCardData[]>([])
   const [isLoadingCards, setIsLoadingCards] = useState(false)
 
+  // Master data
+  const [destinations, setDestinations] = useState<any[]>([])
+  const [airlines, setAirlines] = useState<any[]>([])
+  const [isLoadingMasterData, setIsLoadingMasterData] = useState(false)
+
   // Multiple bookings
   const [bookings, setBookings] = useState<BookingData[]>([{
     id: `booking-${Date.now()}`,
@@ -113,21 +131,32 @@ export default function NewPurchaseOrderPage() {
     origin: "",
     destination: "",
     departureDate: "",
-    arrivalDate: "",
+    costPerPassenger: 0,
+    serviceFeePerPassenger: 0,
     basePrice: 0,
     totalCost: 0,
     totalServiceFee: 0,
+    totalAmount: 0,
     paymentCardId: "",
     paymentCardNumber: "",
     returnBookingRef: "",
     returnFlightNumber: "",
+    returnAirline: "",
+    returnOrigin: "",
+    returnDestination: "",
     returnDepartureDate: "",
-    returnArrivalDate: "",
+    returnCostPerPassenger: 0,
+    returnServiceFeePerPassenger: 0,
     returnBasePrice: 0,
     returnTotalCost: 0,
     returnServiceFee: 0,
+    returnTotalAmount: 0,
     returnPaymentCardId: "",
     returnPaymentCardNumber: "",
+    returnBaggageCharge: 0,
+    returnMealCharge: 0,
+    returnSeatSelectionCharge: 0,
+    returnAirportTax: 0,
     passengers: [{
       title: "",
       firstName: "",
@@ -161,6 +190,11 @@ export default function NewPurchaseOrderPage() {
   // Load credit cards on mount
   useEffect(() => {
     loadCreditCards()
+  }, [])
+
+  // Load master data on mount
+  useEffect(() => {
+    loadMasterData()
   }, [])
 
   const loadEntityHistory = async () => {
@@ -206,6 +240,32 @@ export default function NewPurchaseOrderPage() {
     }
   }
 
+  const loadMasterData = async () => {
+    setIsLoadingMasterData(true)
+    try {
+      // Load destinations and airlines in parallel
+      const [destinationsResponse, airlinesResponse] = await Promise.all([
+        fetch('/api/destinations?active=true', { credentials: "include" }),
+        fetch('/api/airlines?active=true', { credentials: "include" })
+      ])
+
+      if (destinationsResponse.ok) {
+        const destinationsData = await destinationsResponse.json()
+        setDestinations(destinationsData)
+      }
+
+      if (airlinesResponse.ok) {
+        const airlinesData = await airlinesResponse.json()
+        setAirlines(airlinesData)
+      }
+    } catch (error) {
+      console.error("Failed to load master data:", error)
+      toast.error("Failed to load master data")
+    } finally {
+      setIsLoadingMasterData(false)
+    }
+  }
+
   const addBooking = () => {
     const newBooking: BookingData = {
       id: `booking-${Date.now()}`,
@@ -217,18 +277,27 @@ export default function NewPurchaseOrderPage() {
       destination: "",
       departureDate: "",
       arrivalDate: "",
+      costPerPassenger: 0,
+      serviceFeePerPassenger: 0,
       basePrice: 0,
       totalCost: 0,
       totalServiceFee: 0,
+      totalAmount: 0,
       paymentCardId: "",
       paymentCardNumber: "",
       returnBookingRef: "",
       returnFlightNumber: "",
+      returnAirline: "",
+      returnOrigin: "",
+      returnDestination: "",
       returnDepartureDate: "",
       returnArrivalDate: "",
+      returnCostPerPassenger: 0,
+      returnServiceFeePerPassenger: 0,
       returnBasePrice: 0,
       returnTotalCost: 0,
       returnServiceFee: 0,
+      returnTotalAmount: 0,
       returnPaymentCardId: "",
       returnPaymentCardNumber: "",
       passengers: [{
@@ -257,9 +326,36 @@ export default function NewPurchaseOrderPage() {
   }
 
   const updateBooking = (bookingId: string, field: keyof BookingData, value: any) => {
-    setBookings(bookings.map(b => 
-      b.id === bookingId ? { ...b, [field]: value } : b
-    ))
+    setBookings(bookings.map(b => {
+      if (b.id !== bookingId) return b;
+
+      const updated = { ...b, [field]: value };
+      const passengerCount = updated.passengers.length;
+
+      // Auto-calculate prices when cost, service fee, or additional charges change
+      if (field === 'costPerPassenger' || field === 'serviceFeePerPassenger' || field === 'passengers' ||
+          field === 'baggageCharge' || field === 'mealCharge' || field === 'seatSelectionCharge' || field === 'airportTax') {
+        updated.basePrice = updated.costPerPassenger + updated.serviceFeePerPassenger;
+        updated.totalCost = updated.costPerPassenger * passengerCount;
+        updated.totalServiceFee = updated.serviceFeePerPassenger * passengerCount;
+        // Include all additional charges in totalAmount
+        updated.totalAmount = (updated.basePrice * passengerCount) +
+                             (updated.baggageCharge || 0) +
+                             (updated.mealCharge || 0) +
+                             (updated.seatSelectionCharge || 0) +
+                             (updated.airportTax || 0);
+      }
+
+      // Auto-calculate return flight prices if applicable
+      if ((field === 'returnCostPerPassenger' || field === 'returnServiceFeePerPassenger') && updated.tripType === 'ROUND_TRIP') {
+        updated.returnBasePrice = (updated.returnCostPerPassenger || 0) + (updated.returnServiceFeePerPassenger || 0);
+        updated.returnTotalCost = (updated.returnCostPerPassenger || 0) * passengerCount;
+        updated.returnServiceFee = (updated.returnServiceFeePerPassenger || 0) * passengerCount;
+        updated.returnTotalAmount = (updated.returnBasePrice || 0) * passengerCount;
+      }
+
+      return updated;
+    }))
   }
 
   const addPassengerToBooking = (bookingId: string) => {
@@ -332,12 +428,13 @@ export default function NewPurchaseOrderPage() {
 
   const calculateBookingTotals = (booking: BookingData) => {
     const passengerCount = booking.passengers.length
-    
+
     // Calculate outbound flight totals
     const outboundTotalPrice = booking.basePrice * passengerCount
-    const outboundCostPerPassenger = booking.totalCost / passengerCount
-    const outboundServiceFeePerPassenger = booking.totalServiceFee / passengerCount
-    const outboundProfit = outboundTotalPrice - booking.totalCost - booking.totalServiceFee
+    const outboundCostPerPassenger = booking.costPerPassenger
+    const outboundServiceFeePerPassenger = booking.serviceFeePerPassenger
+    // New profit formula: Total Amount - Total Cost + Airport Tax
+    const outboundProfit = booking.totalAmount - booking.totalCost + (booking.airportTax || 0)
     
     // Calculate return flight totals if round trip
     let returnTotalPrice = 0
@@ -347,9 +444,10 @@ export default function NewPurchaseOrderPage() {
     
     if (booking.tripType === "ROUND_TRIP") {
       returnTotalPrice = (booking.returnBasePrice || 0) * passengerCount
-      returnCostPerPassenger = (booking.returnTotalCost || 0) / passengerCount
-      returnServiceFeePerPassenger = (booking.returnServiceFee || 0) / passengerCount
-      returnProfit = returnTotalPrice - (booking.returnTotalCost || 0) - (booking.returnServiceFee || 0)
+      returnCostPerPassenger = booking.returnCostPerPassenger || 0
+      returnServiceFeePerPassenger = booking.returnServiceFeePerPassenger || 0
+      // New profit formula: Total Amount - Total Cost + Airport Tax
+      returnProfit = (booking.returnTotalAmount || 0) - (booking.returnTotalCost || 0) + (booking.returnAirportTax || 0)
     }
     
     // Calculate combined totals
@@ -387,7 +485,7 @@ export default function NewPurchaseOrderPage() {
     
     bookings.forEach(booking => {
       totalPassengers += booking.passengers.length
-      totalRevenue += booking.basePrice * booking.passengers.length
+      totalRevenue += booking.totalAmount
       totalCost += booking.totalCost
       totalServiceFee += booking.totalServiceFee
     })
@@ -415,8 +513,8 @@ export default function NewPurchaseOrderPage() {
 
       // Validate all bookings
       for (const booking of bookings) {
-        if (!booking.flightNumber || !booking.airline || !booking.origin || 
-            !booking.destination || !booking.departureDate || !booking.arrivalDate) {
+        if (!booking.flightNumber || !booking.airline || !booking.origin ||
+            !booking.destination || !booking.departureDate) {
           throw new Error("Please fill in all flight information for all bookings")
         }
 
@@ -464,10 +562,26 @@ export default function NewPurchaseOrderPage() {
           origin: booking.origin,
           destination: booking.destination,
           departureDate: booking.departureDate,
-          arrivalDate: booking.arrivalDate,
           basePrice: parseFloat(booking.basePrice.toString()),
           totalCost: parseFloat(booking.totalCost.toString()),
           totalServiceFee: parseFloat(booking.totalServiceFee.toString()),
+          costPerPassenger: parseFloat(booking.costPerPassenger.toString()),
+          serviceFeePerPassenger: parseFloat(booking.serviceFeePerPassenger.toString()),
+          baggageCharge: parseFloat((booking.baggageCharge || 0).toString()),
+          mealCharge: parseFloat((booking.mealCharge || 0).toString()),
+          seatSelectionCharge: parseFloat((booking.seatSelectionCharge || 0).toString()),
+          airportTax: parseFloat((booking.airportTax || 0).toString()),
+          // Return flight details for round trips
+          returnBookingRef: booking.returnBookingRef || undefined,
+          returnFlightNumber: booking.returnFlightNumber || undefined,
+          returnAirline: booking.returnAirline || undefined,
+          returnOrigin: booking.returnOrigin || undefined,
+          returnDestination: booking.returnDestination || undefined,
+          returnDepartureDate: booking.returnDepartureDate || undefined,
+          returnBaggageCharge: booking.returnBaggageCharge ? parseFloat(booking.returnBaggageCharge.toString()) : undefined,
+          returnMealCharge: booking.returnMealCharge ? parseFloat(booking.returnMealCharge.toString()) : undefined,
+          returnSeatSelectionCharge: booking.returnSeatSelectionCharge ? parseFloat(booking.returnSeatSelectionCharge.toString()) : undefined,
+          returnAirportTax: booking.returnAirportTax ? parseFloat(booking.returnAirportTax.toString()) : undefined,
           passengers: booking.passengers
         }))
       }
@@ -720,6 +834,10 @@ export default function NewPurchaseOrderPage() {
                     <span className="text-muted-foreground">Address:</span>
                     <p className="font-medium">{selectedEntity.address || '-'}</p>
                   </div>
+                  <div>
+                    <span className="text-muted-foreground">Payment Terms:</span>
+                    <p className="font-medium">{selectedEntity.paymentTerms ? `${selectedEntity.paymentTerms} days` : 'N/A'}</p>
+                  </div>
                 </div>
               </div>
             )}
@@ -849,7 +967,7 @@ export default function NewPurchaseOrderPage() {
                         {/* Outbound Flight */}
                         <div className="mb-4">
                           <h5 className="text-sm font-medium mb-3">Outbound Flight</h5>
-                          <div className="grid grid-cols-3 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
                             <Label>Booking Reference*</Label>
                             <Input
@@ -870,41 +988,57 @@ export default function NewPurchaseOrderPage() {
                           </div>
                           <div>
                             <Label>Airline*</Label>
-                            <Input
+                            <Select
                               value={booking.airline}
-                              onChange={(e) => updateBooking(booking.id, "airline", e.target.value)}
-                              placeholder="e.g., Thai Airways"
-                              required
-                            />
+                              onValueChange={(value) => updateBooking(booking.id, "airline", value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select airline" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {airlines.map((airline) => (
+                                  <SelectItem key={airline.id} value={airline.name}>
+                                    {airline.code} - {airline.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div>
-                            <Label>Base Price per Passenger (฿)*</Label>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={booking.basePrice}
-                              onChange={(e) => updateBooking(booking.id, "basePrice", parseFloat(e.target.value) || 0)}
-                              required
-                            />
-                          </div>
-                          <div>
-                            <Label>Origin</Label>
-                            <Input
+                            <Label>Origin*</Label>
+                            <Select
                               value={booking.origin}
-                              onChange={(e) => updateBooking(booking.id, "origin", e.target.value)}
-                              placeholder="e.g., Bangkok (BKK)"
-                              required
-                            />
+                              onValueChange={(value) => updateBooking(booking.id, "origin", value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select origin" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {destinations.map((destination) => (
+                                  <SelectItem key={destination.id} value={`${destination.name} (${destination.code})`}>
+                                    {destination.code} - {destination.name}, {destination.city}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div>
-                            <Label>Destination</Label>
-                            <Input
+                            <Label>Destination*</Label>
+                            <Select
                               value={booking.destination}
-                              onChange={(e) => updateBooking(booking.id, "destination", e.target.value)}
-                              placeholder="e.g., Chiang Mai (CNX)"
-                              required
-                            />
+                              onValueChange={(value) => updateBooking(booking.id, "destination", value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select destination" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {destinations.map((destination) => (
+                                  <SelectItem key={destination.id} value={`${destination.name} (${destination.code})`}>
+                                    {destination.code} - {destination.name}, {destination.city}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div>
                             <Label>Departure Date</Label>
@@ -916,40 +1050,134 @@ export default function NewPurchaseOrderPage() {
                             />
                           </div>
                           <div>
-                            <Label>Arrival Date</Label>
-                            <Input
-                              type="datetime-local"
-                              value={booking.arrivalDate}
-                              onChange={(e) => updateBooking(booking.id, "arrivalDate", e.target.value)}
-                              required
-                            />
-                          </div>
-                          <div>
-                            <Label>Total Cost (฿)</Label>
+                            <Label>Cost per Passenger (฿)*</Label>
                             <Input
                               type="number"
                               min="0"
                               step="0.01"
-                              value={booking.totalCost}
-                              onChange={(e) => updateBooking(booking.id, "totalCost", parseFloat(e.target.value) || 0)}
-                              placeholder="Total cost for this booking"
+                              value={booking.costPerPassenger}
+                              onChange={(e) => updateBooking(booking.id, "costPerPassenger", parseFloat(e.target.value) || 0)}
+                              placeholder="Actual cost per passenger"
                               required
                             />
                           </div>
                           <div>
-                            <Label>Total Service Fee (฿)</Label>
+                            <Label>Service Fee per Passenger (฿)*</Label>
                             <Input
                               type="number"
                               min="0"
                               step="0.01"
-                              value={booking.totalServiceFee}
-                              onChange={(e) => updateBooking(booking.id, "totalServiceFee", parseFloat(e.target.value) || 0)}
-                              placeholder="Total service fee"
+                              value={booking.serviceFeePerPassenger}
+                              onChange={(e) => updateBooking(booking.id, "serviceFeePerPassenger", parseFloat(e.target.value) || 0)}
+                              placeholder="Profit per passenger"
                               required
                             />
+                          </div>
+                          <div>
+                            <Label>Base Price per Passenger (฿)</Label>
+                            <div className="flex items-center h-10 px-3 py-2 bg-muted rounded-md">
+                              <span className="font-semibold">฿{booking.basePrice.toLocaleString()}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">Auto-calculated (Cost + Service Fee)</p>
                           </div>
                         </div>
-                        
+
+                        {/* Additional Charges Section */}
+                        <div className="mt-4 p-4 border rounded-lg bg-blue-50/50">
+                          <h5 className="text-sm font-medium mb-3 text-blue-900">Additional Charges (Total for all passengers)</h5>
+                          <div className="grid grid-cols-4 gap-4">
+                            <div>
+                              <Label>ค่าโหลดสัมภาระ (฿)</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={booking.baggageCharge || 0}
+                                onChange={(e) => updateBooking(booking.id, "baggageCharge", parseFloat(e.target.value) || 0)}
+                                placeholder="0.00"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">Baggage Charge</p>
+                            </div>
+                            <div>
+                              <Label>ค่าอาหารและเครื่องดื่ม (฿)</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={booking.mealCharge || 0}
+                                onChange={(e) => updateBooking(booking.id, "mealCharge", parseFloat(e.target.value) || 0)}
+                                placeholder="0.00"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">Meal & Beverage</p>
+                            </div>
+                            <div>
+                              <Label>ค่าเลือกที่นั่ง (฿)</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={booking.seatSelectionCharge || 0}
+                                onChange={(e) => updateBooking(booking.id, "seatSelectionCharge", parseFloat(e.target.value) || 0)}
+                                placeholder="0.00"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">Seat Selection</p>
+                            </div>
+                            <div>
+                              <Label>ค่าภาษีสนามบิน (฿)</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={booking.airportTax || 0}
+                                onChange={(e) => updateBooking(booking.id, "airportTax", parseFloat(e.target.value) || 0)}
+                                placeholder="0.00"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">Airport Tax (no VAT)</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Calculated Totals Display */}
+                        <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                          <h5 className="text-sm font-medium mb-3 flex items-center gap-2">
+                            <Calculator className="h-4 w-4" />
+                            Calculated Totals for {booking.passengers.length} Passenger(s)
+                          </h5>
+                          <div className="grid grid-cols-2 gap-4 text-sm mb-3">
+                            <div>
+                              <p className="text-muted-foreground">Base Amount (Price × Passengers)</p>
+                              <p className="font-semibold">฿{(booking.basePrice * booking.passengers.length).toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Additional Charges</p>
+                              <p className="font-semibold">
+                                ฿{((booking.baggageCharge || 0) + (booking.mealCharge || 0) + (booking.seatSelectionCharge || 0) + (booking.airportTax || 0)).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                          <Separator className="my-2" />
+                          <div className="grid grid-cols-4 gap-4 text-sm">
+                            <div>
+                              <p className="text-muted-foreground">Total Cost</p>
+                              <p className="font-semibold">฿{booking.totalCost.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Total Service Fee</p>
+                              <p className="font-semibold">฿{booking.totalServiceFee.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Total Amount</p>
+                              <p className="font-semibold text-lg text-blue-600">฿{booking.totalAmount.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Profit</p>
+                              <p className="font-semibold text-green-600">
+                                ฿{(booking.totalAmount - booking.totalCost - booking.totalServiceFee).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
                         {/* Payment Card Selection for Outbound */}
                         <div className="mt-4 p-4 border rounded-lg bg-gray-50">
                           <h5 className="text-sm font-medium mb-3 flex items-center gap-2">
@@ -1017,7 +1245,7 @@ export default function NewPurchaseOrderPage() {
                         {booking.tripType === "ROUND_TRIP" && (
                           <div className="mb-4">
                             <h5 className="text-sm font-medium mb-3">Return Flight</h5>
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                               <div>
                                 <Label>Return Booking Reference*</Label>
                                 <Input
@@ -1037,15 +1265,58 @@ export default function NewPurchaseOrderPage() {
                                 />
                               </div>
                               <div>
-                                <Label>Return Base Price per Passenger (฿)*</Label>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={booking.returnBasePrice || 0}
-                                  onChange={(e) => updateBooking(booking.id, "returnBasePrice", parseFloat(e.target.value) || 0)}
-                                  required={booking.tripType === "ROUND_TRIP"}
-                                />
+                                <Label>Airline*</Label>
+                                <Select
+                                  value={booking.returnAirline || ""}
+                                  onValueChange={(value) => updateBooking(booking.id, "returnAirline", value)}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select airline" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {airlines.map((airline) => (
+                                      <SelectItem key={airline.id} value={airline.name}>
+                                        {airline.code} - {airline.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <Label>Origin*</Label>
+                                <Select
+                                  value={booking.returnOrigin || ""}
+                                  onValueChange={(value) => updateBooking(booking.id, "returnOrigin", value)}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select origin" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {destinations.map((destination) => (
+                                      <SelectItem key={destination.id} value={`${destination.name} (${destination.code})`}>
+                                        {destination.code} - {destination.name}, {destination.city}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <Label>Destination*</Label>
+                                <Select
+                                  value={booking.returnDestination || ""}
+                                  onValueChange={(value) => updateBooking(booking.id, "returnDestination", value)}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select destination" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {destinations.map((destination) => (
+                                      <SelectItem key={destination.id} value={`${destination.name} (${destination.code})`}>
+                                        {destination.code} - {destination.name}, {destination.city}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </div>
                               <div>
                                 <Label>Return Departure Date</Label>
@@ -1057,40 +1328,137 @@ export default function NewPurchaseOrderPage() {
                                 />
                               </div>
                               <div>
-                                <Label>Return Arrival Date</Label>
-                                <Input
-                                  type="datetime-local"
-                                  value={booking.returnArrivalDate || ""}
-                                  onChange={(e) => updateBooking(booking.id, "returnArrivalDate", e.target.value)}
-                                  required={booking.tripType === "ROUND_TRIP"}
-                                />
-                              </div>
-                              <div>
-                                <Label>Return Total Cost (฿)</Label>
+                                <Label>Cost per Passenger (฿)*</Label>
                                 <Input
                                   type="number"
                                   min="0"
                                   step="0.01"
-                                  value={booking.returnTotalCost || 0}
-                                  onChange={(e) => updateBooking(booking.id, "returnTotalCost", parseFloat(e.target.value) || 0)}
-                                  placeholder="Total cost for return flight"
+                                  value={booking.returnCostPerPassenger || 0}
+                                  onChange={(e) => updateBooking(booking.id, "returnCostPerPassenger", parseFloat(e.target.value) || 0)}
+                                  placeholder="Actual cost per passenger"
                                   required={booking.tripType === "ROUND_TRIP"}
                                 />
                               </div>
                               <div>
-                                <Label>Return Service Fee (฿)</Label>
+                                <Label>Service Fee per Passenger (฿)*</Label>
                                 <Input
                                   type="number"
                                   min="0"
                                   step="0.01"
-                                  value={booking.returnServiceFee || 0}
-                                  onChange={(e) => updateBooking(booking.id, "returnServiceFee", parseFloat(e.target.value) || 0)}
-                                  placeholder="Service fee for return"
+                                  value={booking.returnServiceFeePerPassenger || 0}
+                                  onChange={(e) => updateBooking(booking.id, "returnServiceFeePerPassenger", parseFloat(e.target.value) || 0)}
+                                  placeholder="Profit per passenger"
                                   required={booking.tripType === "ROUND_TRIP"}
                                 />
+                              </div>
+                              <div>
+                                <Label>Return Base Price per Passenger (฿)</Label>
+                                <div className="flex items-center h-10 px-3 py-2 bg-muted rounded-md">
+                                  <span className="font-semibold">฿{((booking.returnCostPerPassenger || 0) + (booking.returnServiceFeePerPassenger || 0)).toLocaleString()}</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">Auto-calculated (Cost + Service Fee)</p>
                               </div>
                             </div>
-                            
+
+                            {/* Additional Charges Section for Return Flight */}
+                            <div className="mt-4 p-4 border rounded-lg bg-blue-50/50">
+                              <h5 className="text-sm font-medium mb-3 text-blue-900">Additional Charges (Total for all passengers)</h5>
+                              <div className="grid grid-cols-4 gap-4">
+                                <div>
+                                  <Label>ค่าโหลดสัมภาระ (฿)</Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={booking.returnBaggageCharge || 0}
+                                    onChange={(e) => updateBooking(booking.id, "returnBaggageCharge", parseFloat(e.target.value) || 0)}
+                                    placeholder="0.00"
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">Baggage Charge</p>
+                                </div>
+                                <div>
+                                  <Label>ค่าอาหารและเครื่องดื่ม (฿)</Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={booking.returnMealCharge || 0}
+                                    onChange={(e) => updateBooking(booking.id, "returnMealCharge", parseFloat(e.target.value) || 0)}
+                                    placeholder="0.00"
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">Meal & Beverage</p>
+                                </div>
+                                <div>
+                                  <Label>ค่าเลือกที่นั่ง (฿)</Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={booking.returnSeatSelectionCharge || 0}
+                                    onChange={(e) => updateBooking(booking.id, "returnSeatSelectionCharge", parseFloat(e.target.value) || 0)}
+                                    placeholder="0.00"
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">Seat Selection</p>
+                                </div>
+                                <div>
+                                  <Label>ค่าภาษีสนามบิน (฿)</Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={booking.returnAirportTax || 0}
+                                    onChange={(e) => updateBooking(booking.id, "returnAirportTax", parseFloat(e.target.value) || 0)}
+                                    placeholder="0.00"
+                                  />
+                                  <p className="text-xs text-muted-foreground mt-1">Airport Tax (no VAT)</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Calculated Totals Display for Return Flight */}
+                            <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                              <h5 className="text-sm font-medium mb-3 flex items-center gap-2">
+                                <Calculator className="h-4 w-4" />
+                                Calculated Totals for {booking.passengers.length} Passenger(s)
+                              </h5>
+                              <div className="grid grid-cols-2 gap-4 text-sm mb-3">
+                                <div>
+                                  <p className="text-muted-foreground">Base Amount (Price × Passengers)</p>
+                                  <p className="font-semibold">฿{(((booking.returnCostPerPassenger || 0) + (booking.returnServiceFeePerPassenger || 0)) * booking.passengers.length).toLocaleString()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">Additional Charges</p>
+                                  <p className="font-semibold">
+                                    ฿{((booking.returnBaggageCharge || 0) + (booking.returnMealCharge || 0) + (booking.returnSeatSelectionCharge || 0) + (booking.returnAirportTax || 0)).toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <Separator className="my-2" />
+                              <div className="grid grid-cols-4 gap-4 text-sm">
+                                <div>
+                                  <p className="text-muted-foreground">Total Cost</p>
+                                  <p className="font-semibold">฿{((booking.returnCostPerPassenger || 0) * booking.passengers.length).toLocaleString()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">Total Service Fee</p>
+                                  <p className="font-semibold">฿{((booking.returnServiceFeePerPassenger || 0) * booking.passengers.length).toLocaleString()}</p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">Total Amount</p>
+                                  <p className="font-semibold text-lg text-blue-600">
+                                    ฿{(((booking.returnCostPerPassenger || 0) + (booking.returnServiceFeePerPassenger || 0)) * booking.passengers.length +
+                                    (booking.returnBaggageCharge || 0) + (booking.returnMealCharge || 0) + (booking.returnSeatSelectionCharge || 0) + (booking.returnAirportTax || 0)).toLocaleString()}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">Profit</p>
+                                  <p className="font-semibold text-green-600">
+                                    ฿{((booking.returnServiceFeePerPassenger || 0) * booking.passengers.length).toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
                             {/* Payment Card Selection for Return Flight */}
                             <div className="mt-4 p-4 border rounded-lg bg-gray-50">
                               <h5 className="text-sm font-medium mb-3 flex items-center gap-2">

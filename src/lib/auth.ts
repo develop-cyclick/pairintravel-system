@@ -19,7 +19,10 @@ export const authOptions: NextAuthOptions = {
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
+          where: { email: credentials.email },
+          include: {
+            organization: true
+          }
         })
 
         if (!user || !user.password) {
@@ -39,7 +42,9 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role
+          role: user.role,
+          organizationId: user.organizationId,
+          organizationName: user.organization.name
         }
       }
     })
@@ -51,6 +56,8 @@ export const authOptions: NextAuthOptions = {
         token.email = user.email
         token.name = user.name
         token.role = (user as any).role
+        token.organizationId = (user as any).organizationId
+        token.organizationName = (user as any).organizationName
       }
       return token
     },
@@ -60,15 +67,36 @@ export const authOptions: NextAuthOptions = {
         if (token.id) {
           session.user.id = token.id as string
           session.user.role = token.role as string
+          session.user.organizationId = token.organizationId as string
+          session.user.organizationName = token.organizationName as string
+
+          // If organizationId is missing from token, fetch it from DB
+          if (!token.organizationId && token.email) {
+            const user = await prisma.user.findUnique({
+              where: { email: token.email as string },
+              include: {
+                organization: true
+              }
+            })
+            if (user && user.organization) {
+              session.user.organizationId = user.organizationId
+              session.user.organizationName = user.organization.name
+            }
+          }
         }
         // If we have an email but no ID, try to find the user
         else if (token.email) {
           const user = await prisma.user.findUnique({
-            where: { email: token.email as string }
+            where: { email: token.email as string },
+            include: {
+              organization: true
+            }
           })
           if (user) {
             session.user.id = user.id
             session.user.role = user.role
+            session.user.organizationId = user.organizationId
+            session.user.organizationName = user.organization?.name || 'Unknown'
           }
         }
       }

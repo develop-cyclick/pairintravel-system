@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/db"
 import { z } from "zod"
+import { getSessionOrganizationId, verifyOrganizationAccess } from "@/lib/organization"
 
 const createTransactionSchema = z.object({
   transactionType: z.enum(["CHARGE", "PAYMENT", "REFUND", "ADJUSTMENT"]),
@@ -20,6 +21,21 @@ export async function GET(
     const session = await getServerSession(authOptions)
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const organizationId = await getSessionOrganizationId()
+
+    // Verify card belongs to user's organization
+    const card = await prisma.creditCard.findFirst({
+      where: {
+        id: params.id,
+        organizationId
+      },
+      select: { id: true }
+    })
+
+    if (!card) {
+      return NextResponse.json({ error: "Credit card not found" }, { status: 404 })
     }
 
     const searchParams = request.nextUrl.searchParams
@@ -77,12 +93,23 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    const organizationId = await getSessionOrganizationId()
+
     const body = await request.json()
     const validatedData = createTransactionSchema.parse(body)
 
-    // Get current card
-    const card = await prisma.creditCard.findUnique({
-      where: { id: params.id }
+    // Get current card and verify organization access
+    const card = await prisma.creditCard.findFirst({
+      where: {
+        id: params.id,
+        organizationId
+      },
+      select: {
+        id: true,
+        organizationId: true,
+        creditLimit: true,
+        availableCredit: true
+      }
     })
 
     if (!card) {
@@ -91,7 +118,7 @@ export async function POST(
 
     // Calculate new balance based on transaction type
     let newAvailableCredit = card.availableCredit
-    
+
     switch (validatedData.transactionType) {
       case "CHARGE":
         newAvailableCredit -= validatedData.amount

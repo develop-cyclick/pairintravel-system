@@ -38,11 +38,13 @@ export interface PTSystemInvoiceData {
   totalAmount: number
   amountInWords: string
   amountInWordsTh?: string
+  serviceFee?: number // ค่าธรรมเนียมเติม (Additional service fee)
 
   // Additional Services
   baggageCharge: number
   mealCharge: number
   seatSelectionCharge: number
+  additionalCharges?: AdditionalCharge[] // Extra charges like departure fees
 
   // Payment Information
   paymentMethod?: "EDC" | "CASH" | "TRANSFER" | "CHEQUE"
@@ -50,6 +52,10 @@ export interface PTSystemInvoiceData {
   bankAccountNumber?: string
   bankAccountName?: string
   qrCode?: string
+
+  // Reference Numbers
+  bookingNumber?: string // e.g., "PY25092025"
+  printingNumber?: string // Printing reference
 
   // Remarks
   remarks?: string[]
@@ -97,6 +103,12 @@ export interface TourDetail {
   pickupLocation?: string
   pickupTime?: string
   program?: string
+}
+
+export interface AdditionalCharge {
+  description: string // e.g., "ค่าใบอนุญาตการบินต้นทาง"
+  descriptionEn?: string // English description
+  amount: number
 }
 
 // Helper type for amount to words conversion
