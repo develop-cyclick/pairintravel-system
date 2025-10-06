@@ -68,6 +68,7 @@ public/images/temp/
 
 # investigation/planning docs
 CODEBASE_INVESTIGATION_PLAN.md
+VERCEL_ENV_SETUP.md
 
 # IDE
 .vscode/
