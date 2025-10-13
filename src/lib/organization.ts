@@ -116,7 +116,8 @@ export async function getOrganizationStats(organizationId: string) {
   ] = await Promise.all([
     prisma.user.count({ where: { organizationId } }),
     prisma.customer.count({ where: { organizationId } }),
-    prisma.department.count({ where: { organizationId } }),
+    // Departments are globally shared, count all active departments
+    prisma.department.count({ where: { isActive: true } }),
     prisma.purchaseOrder.count({ where: { organizationId } }),
     prisma.booking.count({ where: { organizationId } }),
     prisma.invoice.count({ where: { organizationId } })
