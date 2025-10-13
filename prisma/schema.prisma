@@ -301,6 +301,8 @@ model Invoice {
   status               InvoiceStatus         @default(PENDING)
   qrCode               String?
   pdfUrl               String?
+  pdfGeneratedAt       DateTime?
+  pdfGeneratedBy       String?
   userId               String
   organizationId       String
   paidAt               DateTime?
